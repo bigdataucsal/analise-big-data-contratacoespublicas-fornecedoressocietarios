@@ -17,3 +17,10 @@ env/
 *.zip
 .DS_Store
 Thumbs.db
+
+# Dados derivados do ETL: reprodutiveis a partir do bruto, nao versionar.
+etl/dados/parquet/
+etl/dados/saida_postgres/
+etl/dados/raw/pncp/diario/
+*.parquet
+*.jsonl.parcial
