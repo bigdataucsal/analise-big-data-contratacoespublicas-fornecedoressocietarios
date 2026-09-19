@@ -210,16 +210,28 @@ def montar_sql(fontes) -> str:
 
 
 def descobrir_fontes(raw_dir: Path) -> list:
-    """Todo JSONL bruto do PNCP: os shards diarios do extrator rapido e o
-    arquivo do extrator original. Os dois entram; a deduplicacao resolve a
-    sobreposicao entre eles."""
+    """Todo JSONL bruto do PNCP que existir.
+
+    Entram os tres formatos que o projeto ja produziu -- o arquivo unico do
+    extrator rapido, os shards diarios da versao anterior dele (se alguem
+    ainda tiver) e o arquivo do extrator original. Todos juntos, porque a
+    deduplicacao por numeroControlePNCP resolve a sobreposicao entre eles.
+    """
+    pncp = raw_dir / "pncp"
     fontes = []
-    diario = raw_dir / "pncp" / "diario"
+
+    completo = pncp / f"contratos_{config.ANO_REFERENCIA}_completo.jsonl"
+    if completo.is_file() and completo.stat().st_size > 0:
+        fontes.append(str(completo).replace("\\", "/"))
+
+    diario = pncp / "diario"
     if diario.is_dir() and any(diario.glob("contratos_*.jsonl")):
         fontes.append(str(diario / "contratos_*.jsonl").replace("\\", "/"))
-    legado = raw_dir / "pncp" / f"contratos_{config.ANO_REFERENCIA}.jsonl"
+
+    legado = pncp / f"contratos_{config.ANO_REFERENCIA}.jsonl"
     if legado.is_file() and legado.stat().st_size > 0:
         fontes.append(str(legado).replace("\\", "/"))
+
     return fontes
 
 

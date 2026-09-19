@@ -8,7 +8,7 @@ contra a API do PNCP em 19/09/2026, não estimados.
          │
          │  baixar_pncp_rapido.py        (janela diária + paralelismo)
          ▼
-    dados/raw/pncp/diario/contratos_AAAA-MM-DD.jsonl
+    dados/raw/pncp/contratos_2025_completo.jsonl
          │
          │  tratar_contratos.py          (DuckDB: achata, tipa, deduplica)
          ▼
@@ -48,32 +48,70 @@ responde 400), conexão reaproveitada e alguns dias em paralelo.
 | abordagem | vazão medida |
 |---|---|
 | original (paginação profunda, sequencial) | ~7 registros/s |
-| este (janela diária, 3 em paralelo) | **~780 registros/s** |
+| este, em janela sem limite de taxa | ~780 registros/s |
+| este, com a porta de ritmo em 2,0 s | ~150 reg/s |
 
-### Limite de taxa
+### Limite de taxa — o que medimos, e onde a intuição erra
 
-A API devolve 429 sob concorrência e não manda `Retry-After`. Medido:
+A API devolve 429 sob concorrência e não manda `Retry-After`. Duas rodadas
+mediram coisas diferentes, e a segunda corrigiu a primeira:
 
-| workers | resultado |
+| ritmo sustentado | 429 em 18 requisições |
 |---|---|
-| 3 | nenhum 429 |
-| 4 | 6 respostas 429 |
-| 12 | metade das requisições perdidas (429 + 504) |
+| ~20 req/min | **0** |
+| 40 req/min | 13 |
+| 62 req/min | 10 |
+| 79 req/min (**1 thread**) | 13 |
 
-Daí o padrão de **3 workers**. O script ainda regula o ritmo sozinho: cada 429
-aumenta a pausa global (1,8×, teto de 5 s) e sequências de sucesso a reduzem.
+O limite é de **requisições por unidade de tempo**, e fica entre 20 e 40
+req/min. Não é o tamanho da resposta, nem a concorrência — repare que 1
+thread a 79 req/min falha tanto quanto 3 threads a 62.
+
+Daí o padrão: porta de **2,0 s** e 2 workers. O alvo nominal é 30 req/min,
+mas a latência das respostas (1,6–2,8 s) puxa o ritmo efetivo para baixo
+disso, e foi a configuração que passou sem nenhum 429.
+
+Isso torna errada uma correção que parece óbvia — **reduzir o tamanho da
+página piora**:
+
+| `tamanhoPagina` | tempo/requisição | registros | eficiência |
+|---|---|---|---|
+| 500 | 1,6 s | 500 | **312 reg/s** |
+| 100 | 0,85 s | 100 | 118 reg/s |
+
+Página de 100 precisa de **5× mais requisições** para os mesmos dados, então
+bate no limite 5× mais rápido — e ainda rende menos por requisição. Numa
+rodada real com a escada de redução ligada, a página desceu até 100 e a vazão
+caiu para **2 registros/s**, pior que o extrator original.
+
+Por isso o controle principal é a `PortaRitmo`: um **intervalo mínimo entre
+duas requisições quaisquer**, compartilhado por todas as threads. Pausa por
+thread não serve — com N threads, o ritmo real fica N vezes maior que o
+configurado. Os workers continuam úteis só para esconder latência.
+
+A escada de tamanho (500 → 450 → … → 100) existe e está testada, mas **vem
+desligada**; `--escada` liga, caso um dia a API mude de comportamento.
 
 ### Retomada
 
-Um arquivo por dia, escrito em `.parcial` e renomeado só no fim — shard com
-nome final é shard completo. Cair no meio e rodar de novo pula os dias prontos.
-Não há arquivo de checkpoint: os próprios shards são o checkpoint.
+Um arquivo só, acrescentando linhas, mais um `.dias` com os dias que
+fecharam. Rodar de novo pula os dias já concluídos. Um dia só é gravado
+quando está inteiro, de uma vez, sob lock — duas threads nunca intercalam
+linhas nem deixam linha partida pela metade.
+
+Se o processo morrer entre gravar o dia e marcá-lo, aquele dia volta na
+rodada seguinte e gera linhas repetidas. Não contamina nada: o tratamento
+deduplica por `numeroControlePNCP`.
 
 ```bash
 python baixar_pncp_rapido.py                            # período do config.py
+python baixar_pncp_rapido.py --intervalo 3.0            # ainda mais devagar
 python baixar_pncp_rapido.py --de 20250101 --ate 20250107   # teste curto
 python baixar_pncp_rapido.py --verificar                # dias faltando, duplicatas
 ```
+
+> **Rode de dentro de `etl/`.** Os caminhos do `config.py` são relativos, então
+> rodar da raiz do repositório cria uma árvore `dados/` paralela lá.
 
 > O `baixar_pncp.py` original continua no repositório e seus arquivos
 > (`contratos_2025.jsonl`, `contratos_2025.checkpoint`) não são tocados por
@@ -110,8 +148,9 @@ O que o tratamento faz:
 O bruto atual tem **18.900 linhas para 18.500 chaves únicas — 400 duplicatas**.
 O `.checkpoint` marca a página 185, mas o `.jsonl` tem 189 páginas: o resume do
 extrator original regravou 4 páginas já baixadas. Como os arquivos não devem ser
-alterados, o tratamento absorve isso. O extrator novo não tem essa classe de
-falha, porque o shard só ganha nome final depois de completo.
+alterados, o tratamento absorve isso. O extrator novo reduz muito essa classe
+de falha: um dia só entra no `.dias` depois de gravado e sincronizado em disco,
+então só repete se o processo morrer exatamente entre as duas operações.
 
 ### Compressão
 

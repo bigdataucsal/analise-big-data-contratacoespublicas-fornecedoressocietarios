@@ -18,9 +18,13 @@ env/
 .DS_Store
 Thumbs.db
 
-# Dados derivados do ETL: reprodutiveis a partir do bruto, nao versionar.
+# Dados do ETL: reprodutiveis a partir da API, nao versionar.
+# A raiz entra aqui porque os caminhos do config.py sao relativos -- rodar
+# o script da raiz do repo em vez de dentro de etl/ cria "dados/" aqui.
+dados/
 etl/dados/parquet/
 etl/dados/saida_postgres/
 etl/dados/raw/pncp/diario/
 *.parquet
 *.jsonl.parcial
+*.jsonl
