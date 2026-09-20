@@ -204,14 +204,77 @@ conhecida e precisa ser nomeada: a composição do grupo não se transfere para 
 indivíduo. Um município com 80% de população negra não autoriza afirmar que os
 sócios das empresas de lá sejam negros.
 
-## Proxy setorial
+## Proxy setorial: RAIS Vínculos
 
-A terceira fonte prevista, para compor o proxy setorial por CNAE a partir da
-RAIS ou do Novo CAGED, ainda está em levantamento e será acrescentada a este
-documento. O ponto metodológico já conhecido é que os microdados públicos
-dessas bases são anonimizados e não trazem o CNPJ do empregador, o que obriga o
-cruzamento a ser por CNAE e município e nunca empresa a empresa. Essa é a
-resposta correta caso a banca pergunte por que não ligamos diretamente.
+### Por que a RAIS e não o Novo CAGED
+
+A escolha se decide pela unidade de observação, e não por cobertura ou
+atualidade.
+
+A RAIS é estoque: cada linha é um vínculo empregatício declarado no ano, ativo
+ou não em 31 de dezembro. É isso que permite afirmar que determinado setor em
+determinado município tem tal composição racial. O Novo CAGED é fluxo: cada
+linha é uma admissão, um desligamento ou uma exclusão do mês. O perfil de quem
+foi contratado num mês não é o perfil de quem trabalha no setor, porque fluxo é
+enviesado para rotatividade alta, salário de entrada e trabalhador jovem. Para
+um proxy de composição, fluxo é simplesmente a métrica errada.
+
+Cabe desfazer uma confusão comum. A RAIS não foi descontinuada. O que acabou foi
+a declaração pelo programa GDRAIS, substituída progressivamente pelo eSocial. O
+produto estatístico continua: a RAIS passou a ser extraída do eSocial e o
+Ministério do Trabalho segue publicando o microdado. O ano base mais recente
+disponível é 2025.
+
+### Onde está e o que custa
+
+Os microdados ficam em `ftp.mtps.gov.br/pdet/microdados/`, e a RAIS de vínculos
+do ano base 2025 está em `RAIS/2025/`, dividida por região. Os arquivos somam
+cerca de 3,8 GB comprimidos em formato 7z, sendo São Paulo sozinho 1,1 GB.
+
+As colunas que interessam são sexo, raça ou cor, CNAE 2.0 e município.
+
+Há uma ruptura de formato a partir de 2023. Os arquivos gerados a partir do
+eSocial têm cabeçalho, separador, nomes de coluna e separador decimal
+diferentes dos de até 2022, e a pasta de 2023 distribui as duas versões, a nova
+na raiz e a antiga em um subdiretório chamado Legado. Se a série histórica
+importar ao projeto, o parser precisa de dois modos. Se usarmos apenas o ano
+base mais recente, essa complicação desaparece.
+
+### A ressalva oficial, que joga a favor
+
+A Nota Técnica MTPS 088/12, publicada junto com os microdados, adverte que as
+variáveis de raça ou cor, subclasse do CNAE, ocupação e tipo de deficiência
+devem ser utilizadas com certa cautela, por serem relativamente novas ou por
+apresentarem inconsistências no nível mais desagregado. E acrescenta que, em
+termos gerais, a utilização em nível mais agregado não está comprometida.
+
+Vale citar essa nota no relatório, porque ela descreve exatamente o nosso uso.
+Um proxy setorial agregado por CNAE e município é o nível mais agregado que o
+próprio Ministério declara não comprometido. Reconhecer a ressalva da fonte e
+mostrar que o uso está dentro do que ela admite é mais forte do que ignorá la.
+
+### A limitação que precisa ser declarada
+
+Os microdados públicos da RAIS são desidentificados por construção e não trazem
+o CNPJ do empregador. O cruzamento é portanto necessariamente por CNAE e
+município, nunca empresa a empresa.
+
+Se a banca perguntar por que não ligamos diretamente a empresa ao perfil racial
+da sua força de trabalho, essa é a resposta, e ela não é uma limitação do nosso
+método e sim da base. Do ponto de vista da LGPD isso é positivo: não existe
+caminho de reidentificação nem em tese.
+
+### Como os dois proxies se relacionam
+
+O proxy territorial e o setorial são dois eixos, não substitutos. O Censo
+descreve quem mora no município. A RAIS descreve quem trabalha formalmente
+naquele setor naquele município. Cruzados, permitem afirmar que o recurso
+público foi para setores cuja força de trabalho formal tem determinada
+composição, situados em territórios com determinada composição.
+
+O proxy territorial já está implementado e baixado. O setorial depende de
+baixar e filtrar os arquivos da RAIS, o que é trabalho de engenharia de dados e
+entra em acordo com a Trilha 2.
 
 ## Como citar
 

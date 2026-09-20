@@ -62,22 +62,33 @@ TIMEOUT = 300          # sao 5.570 municipios x 5 categorias numa resposta so
 MAX_TENTATIVAS = 4
 
 
-def valor_para_int(bruto) -> int:
+def valor_para_int(bruto):
     """Converte o valor do SIDRA, que vem como TEXTO com notacao propria.
 
-    O IBGE usa '-' para zero e '...' para dado nao disponivel. No Censo
-    2022 o '-' aparece 1.320 vezes, tipicamente nas categorias amarela e
-    indigena de municipios pequenos. Um int() direto derruba a carga.
+    Os dois casos nao sao a mesma coisa e nao podem virar o mesmo numero:
+
+        '-'    zero de verdade. No Censo 2022 aparece 1.320 vezes,
+               tipicamente nas categorias amarela e indigena de municipios
+               pequenos. Vira 0.
+        '...'  dado NAO DISPONIVEL. Aparece 30 vezes no Censo 2010 e
+               nenhuma no de 2022. Vira None, nunca 0 -- tratar ausencia
+               como zero inventaria populacao que o IBGE nao mediu e
+               contaminaria o percentual.
+
+    O Censo e levantamento de universo, entao aqui nao ha supressao
+    estatistica por confidencialidade como na base de nomes.
     """
     if bruto is None:
-        return 0
+        return None
     texto = str(bruto).strip()
-    if texto in ("-", "", "..", "...", "X"):
+    if texto == "-":
         return 0
+    if texto in ("", "..", "...", "X"):
+        return None
     try:
         return int(float(texto))
     except ValueError:
-        return 0
+        return None
 
 
 def buscar(agregado: str, ano: str, classificacao: str) -> list:
@@ -184,13 +195,17 @@ def main() -> int:
     linhas = []
     for cod in sorted(municipios):
         r = municipios[cod]
-        valores = {c: r.get(c, 0) for c in colunas_cor}
-        total = sum(valores.values())
+        valores = {c: r.get(c) for c in colunas_cor}
+        # None e ausencia de medida, nao zero: se houver qualquer None, o
+        # total e o percentual ficam indefinidos em vez de errados.
+        indefinido = any(v is None for v in valores.values())
+        total = None if indefinido else sum(valores.values())
         # Preta + parda = populacao negra, que e o agrupamento que o proprio
         # IBGE usa nas analises de desigualdade racial. E a variavel que o
         # indicador intersetorial do projeto vai consumir.
-        negra = sum(v for k, v in valores.items()
-                    if k.startswith("preta") or k.startswith("parda"))
+        negra = None if indefinido else sum(
+            v for k, v in valores.items()
+            if k.startswith("preta") or k.startswith("parda"))
         linhas.append({
             "codigo_ibge": cod,
             "municipio": r.get("municipio", ""),
@@ -217,10 +232,14 @@ def main() -> int:
             f.write(",".join(campos) + "\n")
 
     sem_dado = sum(1 for l in linhas if not l["total"])
+    indefinidos = sum(1 for l in linhas if l["total"] is None)
     pcts = sorted(l["pct_negra"] for l in linhas if l["pct_negra"] is not None)
     print(f"\n== Gravado em {csv} ==")
     print(f"   {len(linhas)} municipios, {len(cabecalho)} colunas")
-    if sem_dado:
+    if indefinidos:
+        print(f"   {indefinidos} municipio(s) com alguma categoria nao medida "
+              f"('...' no SIDRA) -- total e percentual ficaram nulos")
+    elif sem_dado:
         print(f"   ATENCAO: {sem_dado} municipio(s) com total zero")
     if pcts:
         meio = pcts[len(pcts)//2]
