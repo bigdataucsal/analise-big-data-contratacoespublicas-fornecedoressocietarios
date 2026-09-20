@@ -12,7 +12,7 @@ O presente projeto utiliza estritamente dados governamentais abertos, em conform
 
 1. **Dados Pessoais (Art. 5º, I):** Embora o nome de sócios e seus CPFs (parcialmente mascarados na origem) sejam públicos, eles constituem dados pessoais. No nosso pipeline, o CPF nunca é armazenado em texto claro no painel final e não é exibido. O nome do sócio é substituído por um identificador derivado na camada de apresentação, e o dashboard aplica um limite mínimo de agregação (nunca exibindo resultados baseados em menos de 5 empresas ou sócios), impedindo a reidentificação direta.
 2. **Dados Sensíveis (Cor/Raça - Art. 5º, II):** A cor e raça são dados sensíveis. Avaliamos e **rejeitamos ativamente** o cruzamento do nome dos sócios com bases que contêm raça autodeclarada (ex.: TSE), pois essa prática configuraria reidentificação ilegal de dado sensível.
-3. **Solução Adotada (Proxy Ecológico):** Para endereçar a ODS 18 sem ferir a LGPD, utilizamos inferência ecológica. O indicador de cor/raça não é atribuído ao indivíduo (sócio), mas sim ao *contexto territorial e setorial da empresa* (via Censo do IBGE e RAIS/CAGED). O indicador final relata para quais perfis demográficos de municípios e setores os recursos públicos fluem, mantendo o nível de análise estritamente macro.
+3. **Solução Adotada (Proxy Ecológico):** Para endereçar a ODS 18 sem ferir a LGPD, utilizamos inferência ecológica. O indicador de cor/raça não é atribuído ao indivíduo (sócio), mas sim ao *contexto territorial e setorial da empresa* (via Censo do IBGE e RAIS). O indicador final relata para quais perfis demográficos de municípios e setores os recursos públicos fluem, mantendo o nível de análise estritamente macro.
 
 ---
 
