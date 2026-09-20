@@ -52,10 +52,26 @@ PostgreSQL.
 ## A evidência de desempenho
 
 Rodamos a mesma consulta nas duas abordagens, cinco execuções cada, reportando
-a mediana. A consulta escolhida é a do KPI interseccional, que é a mais pesada
-do painel: três junções entre fato, fornecedor e município, agrupando por faixa
-de composição racial do território e por faixa de valor, com soma, contagem e
-mediana.
+a mediana.
+
+Antes dos números, é preciso ser exato sobre o que foi medido, porque a
+consulta executada não é o KPI interseccional propriamente dito e seria
+desonesto chamá la assim. Ela tem a mesma forma de carga, que é o que importa
+para comparar motores: três junções entre fato, fornecedor e município,
+agrupamento por faixa de composição racial do território e por faixa de valor,
+com soma, contagem e mediana.
+
+Duas diferenças em relação ao KPI de verdade, e ambas existem porque a base de
+sócios da Receita ainda não foi baixada. Primeiro, o município usado é o do
+órgão comprador, que é o que o PNCP fornece, e não o da sede do fornecedor, que
+é o que a RN-06 exige e que só vem com a Receita. Segundo, a consulta agrupa
+por tipo de pessoa em vez de por gênero do controle, porque o gênero depende da
+tabela ponte, que ainda não tem conteúdo.
+
+Ou seja, a junção com a tabela ponte, que é justamente a parte que o argumento
+da modelagem existe para defender, não está nesta medição. O que o teste mede é
+o custo de um padrão de junção e agregação equivalente, usado como proxy de
+carga. Quando a Receita chegar, a consulta real substitui esta.
 
 | abordagem | mediana | mínimo | máximo |
 |---|---|---|---|
@@ -67,9 +83,21 @@ comparação é justa.
 
 O motor colunar foi quatro vezes mais rápido. É preciso dizer com clareza que
 essa medição foi feita sobre os 58.328 contratos já coletados, e não sobre os
-2.023.236 do recorte completo. Nessa escala os dois caminhos cabem inteiros na
+2.023.236 do recorte completo.
+
+Sobre esse 58.328, cabe uma reconciliação, porque aparecem três números
+próximos em documentos diferentes deste projeto e a diferença tem explicação.
+São 58.769 contratos coletados no bruto. Aplicando a RN-02 sobre o bruto, ficam
+58.333, que é o número do arquivo de recorte. Aplicando a mesma regra sobre o
+dado já tratado, ficam 58.328. Os cinco de diferença são contratos com valor de
+um décimo de milésimo de real, que o tratamento arredonda para zero ao converter
+para decimal de duas casas e que então não passam no critério de valor maior que
+zero. O arredondamento está correto: contrato de R$ 0,0001 não representa
+transferência de recurso.
+
+Voltando à escala: com 58 mil contratos os dois caminhos cabem inteiros na
 memória, então a diferença de quatro vezes subestima o que acontece no volume
-real: é justamente quando o dado deixa de caber na memória que a leitura
+real. É justamente quando o dado deixa de caber na memória que a leitura
 colunar, que carrega apenas as colunas consultadas, se separa da leitura linha
 a linha.
 

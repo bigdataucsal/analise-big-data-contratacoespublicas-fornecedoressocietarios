@@ -175,6 +175,16 @@ Por quê: sem a marcação de sobreposição, o somatório por sócio ultrapassa
 total contratado e a métrica perde sentido, porque o mesmo valor é contado uma
 vez para cada sócio da empresa.
 
+Quais sócios contam aqui, e por que diferem da RN-05. Para concentração entram
+apenas os grupos de participação societária e de titularidade, ficando de fora
+o grupo de administração. A razão é que a pergunta da concentração é sobre
+controle de capital, ou seja, quem é dono do que recebe recurso público, e um
+administrador contratado sem participação no capital não é dono. Já a RN-05,
+que classifica o controle da empresa por gênero, inclui a administração, porque
+ali a pergunta é sobre quem decide, e administrar é decidir. As duas regras
+usam recortes diferentes de propósito, e as visões materializadas do schema
+refletem essa diferença.
+
 É esta regra que justifica tecnicamente a recusa da amostragem estatística.
 Análise de rede depende de enxergar todos os contratos de cada sócio dentro do
 recorte: uma amostra transformaria um sócio com oito empresas num sócio com

@@ -149,7 +149,12 @@ CREATE TABLE IF NOT EXISTS ponte_empresa_socio (
         CHECK (grupo_qualificacao IN ('participacao', 'titularidade',
                                       'administracao', 'representacao', 'outro')),
     competencia        TEXT NOT NULL,      -- AAAA-MM do arquivo da Receita
-    PRIMARY KEY (id_fornecedor, id_socio, qualificacao)
+    -- A competencia entra na chave. Sem ela, carregar uma segunda
+    -- competencia colidiria com a primeira, e o modelo impediria por
+    -- construcao exatamente o caminho que a RN-08 aponta como correcao da
+    -- sua propria limitacao: comparar competencias sucessivas para
+    -- reconstruir entradas e saidas da sociedade.
+    PRIMARY KEY (id_fornecedor, id_socio, qualificacao, competencia)
 );
 
 COMMENT ON TABLE ponte_empresa_socio IS
