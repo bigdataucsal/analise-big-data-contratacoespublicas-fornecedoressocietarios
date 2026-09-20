@@ -221,10 +221,11 @@ sai quando o piloto rodar sobre os sócios da Receita Federal, que é a populaç
 
 Vale notar que a terceira pergunta é a que mais restringe o desenho técnico,
 porque análise de rede exige ver todos os contratos de cada sócio dentro do
-recorte. É por isso que reduzimos o universo por recorte de órgão e não por
-amostragem aleatória: recortar preserva a rede íntegra dentro do universo
-escolhido, enquanto amostrar a fragmenta e faz a métrica de concentração
-subestimar sistematicamente o fenômeno que se quer medir.
+recorte. Das três estratégias de redução de volume que o guia oferece, que são
+filtros, agregações e amostragem estatística, adotamos as duas primeiras e
+descartamos a terceira por causa dela: recortar preserva a rede íntegra dentro
+do universo escolhido, enquanto amostrar a fragmenta e faz a métrica de
+concentração subestimar sistematicamente o fenômeno que se quer medir.
 
 ## Nota sobre reprodutibilidade
 

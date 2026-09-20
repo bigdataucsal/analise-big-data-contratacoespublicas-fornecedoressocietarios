@@ -18,12 +18,16 @@ O presente projeto utiliza estritamente dados governamentais abertos, em conform
 
 ## 2. Ingestão e Classificação dos Tipos de Dado
 *(A ser preenchido na Semana 2 pelas Trilhas 2 e 4)*
+
+> Material pronto da Trilha 3: [docs/tipos-de-dado.md](docs/tipos-de-dado.md), com um trecho real colado de cada variedade, e [docs/bases-utilizadas.md](docs/bases-utilizadas.md), que declara a base oficial do tema e justifica cada base complementar.
 * Estruturado: 
 * Semi-estruturado: 
 * Não estruturado: 
 
 ## 3. Os 5 V's aplicados ao Dataset
 *(A ser preenchido na Semana 2 com os números reais do inventário da Trilha 2)*
+
+> Material pronto da Trilha 3: [docs/5-vs.md](docs/5-vs.md), com todos os números medidos contra os dados do projeto.
 * Volume: 
 * Velocidade: 
 * Variedade: 
@@ -33,12 +37,17 @@ O presente projeto utiliza estritamente dados governamentais abertos, em conform
 ## 4. Arquitetura e Justificativa (Relacional vs. Não Relacional)
 *(A ser preenchido na Semana 3 com base no teste comparativo de tempos e no modelo estrela proposto)*
 
+> Material pronto da Trilha 3: [docs/escolha-do-banco.md](docs/escolha-do-banco.md) e o modelo em [etl/schema_estrela.sql](etl/schema_estrela.sql). Falta o tempo do PostgreSQL, que é medição da Trilha 1.
+
 ## 5. Limpeza e Tratamento (ETL) e Dicionário de Dados
 *(A ser preenchido ao longo da Fase 2)*
 
+> Material pronto da Trilha 3: [docs/dicionario-de-dados.md](docs/dicionario-de-dados.md), cobrindo as dez tabelas do modelo estrela. As colunas que vêm da Receita Federal estão descritas pelo layout oficial e marcadas como pendentes até o download concluir.
+
 ## 6. Regras de Negócio
 *(A ser preenchido iterativamente pela Trilha 3 na Fase 2)*
-* RN-01 a RN-09...
+
+> [docs/regras-de-negocio.md](docs/regras-de-negocio.md): RN-01 a RN-09 escritas, cada uma com enunciado, justificativa e o número medido que a sustenta.
 
 ## 7. Infraestrutura, Deploy e IaC
 *(A ser preenchido pela Trilha 1 detalhando o uso do Terraform e Aiven)*

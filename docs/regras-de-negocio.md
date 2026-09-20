@@ -185,12 +185,23 @@ ali a pergunta é sobre quem decide, e administrar é decidir. As duas regras
 usam recortes diferentes de propósito, e as visões materializadas do schema
 refletem essa diferença.
 
-É esta regra que justifica tecnicamente a recusa da amostragem estatística.
+É esta regra que determina qual estratégia de redução de volume adotamos.
+
+O guia do projeto oferece três caminhos para caber no limite de 1 GB do plano
+gratuito: filtros, agregações ou amostragem estatística. Escolhemos os dois
+primeiros e descartamos o terceiro, e o motivo está nesta regra.
+
 Análise de rede depende de enxergar todos os contratos de cada sócio dentro do
-recorte: uma amostra transformaria um sócio com oito empresas num sócio com
-duas, e a métrica passaria a subestimar sistematicamente a concentração.
-Recortar por órgão preserva a rede íntegra dentro do universo escolhido,
-amostrar a fragmenta.
+recorte. Uma amostra aleatória transformaria um sócio com oito empresas num
+sócio com duas, e a métrica de concentração passaria a subestimar
+sistematicamente o próprio fenômeno que se quer medir. Recortar por órgão
+reduz o universo mas preserva a rede íntegra dentro dele; amostrar reduz o
+universo fragmentando a rede.
+
+Não se trata portanto de ignorar a amostragem, e sim de escolher, entre as três
+opções oferecidas, as duas compatíveis com a pergunta analítica. Para uma
+análise que fosse puramente de agregados de valor, a amostragem seria
+perfeitamente adequada.
 
 ## RN-08. Marcação de sanção e vínculo societário na data
 
