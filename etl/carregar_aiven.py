@@ -5,6 +5,20 @@ Le os CSV gerados pelo tratar_contratos.py e carrega via COPY, que e a
 via rapida do Postgres para volume -- um INSERT por linha levaria horas
 onde o COPY leva minutos.
 
+ATENCAO -- este carregador aponta para o schema ANTIGO
+------------------------------------------------------
+Ele carrega contra o schema_postgres.sql, que e uma tabela unica
+desnormalizada. Esse schema foi superado pelo schema_estrela.sql, porque
+medimos que a tabela unica ocuparia cerca de 1,9 GB no recorte completo
+contra um orcamento utilizavel de 500 a 700 MB (ver
+docs/escolha-do-banco.md).
+
+Para uma amostra pequena, como os 58 mil contratos de janeiro, este
+carregador funciona e serve para validar a conexao com o Aiven. Para o
+recorte completo, a carga precisa ser reescrita para o modelo estrela:
+popular as dimensoes, resolver as chaves e so entao carregar o fato.
+Esse trabalho ainda nao foi feito.
+
 Pre-requisitos:
     pip install "psycopg[binary]" python-dotenv
     python tratar_contratos.py          # gera os CSV

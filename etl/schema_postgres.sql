@@ -1,3 +1,19 @@
+-- ATENCAO: ESTE SCHEMA FOI SUPERADO. NAO USE NO RECORTE COMPLETO.
+-- =====================================================================
+-- Tabela unica, desnormalizada. Medido, ela ocuparia cerca de 1,9 GB
+-- entre dados e indices para os 2.023.236 contratos do recorte, contra um
+-- orcamento utilizavel de 500 a 700 MB no plano gratuito da Aiven -- e o
+-- limite de 1 GB de la e o DISCO do servico, nao a soma das tabelas.
+--
+-- O substituto e o schema_estrela.sql, que normaliza em modelo estrela e
+-- traz a tabela ponte empresa-socio. A justificativa esta em
+-- docs/escolha-do-banco.md.
+--
+-- Este arquivo fica no repositorio por dois motivos: o carregar_aiven.py
+-- ainda carrega contra ele (a carga em estrela ainda nao foi escrita), e
+-- ele serve de termo de comparacao no documento de escolha do banco. Para
+-- uma amostra pequena ele funciona; para o recorte completo, nao cabe.
+--
 -- Schema dos contratos tratados no Aiven for PostgreSQL.
 -- =====================================================================
 -- Aplicado pelo carregar_aiven.py, mas roda igual no psql:
