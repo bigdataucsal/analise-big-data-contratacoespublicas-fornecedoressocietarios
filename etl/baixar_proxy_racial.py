@@ -1,0 +1,237 @@
+"""
+Composicao de cor ou raca por municipio, do Censo 2022 (proxy territorial).
+=====================================================================
+Entrega da T3. Baixa do SIDRA a populacao residente por cor ou raca em
+todos os municipios e monta a tabela de dimensao que o modelo estrela usa
+para o proxy ecologico.
+
+O que este dado e, e o que ele NAO e
+------------------------------------
+Ele descreve o TERRITORIO, nunca a pessoa. O indicador resultante permite
+dizer "esse recurso publico foi para empresas sediadas em municipios com
+tal composicao racial". Nao permite dizer nada sobre a cor ou raca de um
+socio, e essa distincao e o que mantem o projeto dentro da LGPD: cor e
+raca sao dado sensivel pelo art. 5 da lei, e inferir no nivel individual
+por cruzamento seria reidentificacao.
+
+E inferencia ecologica, com a limitacao classica desse metodo: a
+composicao do grupo nao se transfere para o individuo. Declarar isso e
+obrigatorio no relatorio.
+
+Fonte
+-----
+IBGE, Censo Demografico 2022, via API de agregados v3.
+
+    agregado 9605  "Populacao residente, por cor ou raca, nos Censos"
+    variavel 93    populacao residente, em pessoas
+    classificacao 86, "Cor ou raca", com as categorias
+                   2776 Branca | 2777 Preta | 2778 Amarela
+                   2779 Parda  | 2780 Indigena | 95251 Total
+    nivel N6       municipio (todos os 5.570 de uma vez)
+
+O agregado 9605 traz 2010 e 2022 na mesma tabela, ja harmonizados, o que
+o torna preferivel a outras tabelas de cor e raca.
+
+Para cruzar cor/raca COM SEXO existe o agregado 9606, que acrescenta a
+classificacao 2 (sexo: 4 homens, 5 mulheres) e a 287 (idade). Ao usa-lo,
+fixe sempre 287[100362] para pegar so o total de idade -- sem isso a API
+devolve as 134 faixas etarias e o payload explode.
+
+Uso (rodar de dentro de etl/):
+    python baixar_proxy_racial.py
+    python baixar_proxy_racial.py --com-sexo     # usa o agregado 9606
+    python baixar_proxy_racial.py --ano 2010     # para comparar censos
+"""
+
+import argparse
+import sys
+import time
+from pathlib import Path
+
+import requests
+
+API = "https://servicodados.ibge.gov.br/api/v3/agregados"
+CATEGORIAS = {
+    "2776": "branca",
+    "2777": "preta",
+    "2778": "amarela",
+    "2779": "parda",
+    "2780": "indigena",
+}
+TIMEOUT = 300          # sao 5.570 municipios x 5 categorias numa resposta so
+MAX_TENTATIVAS = 4
+
+
+def valor_para_int(bruto) -> int:
+    """Converte o valor do SIDRA, que vem como TEXTO com notacao propria.
+
+    O IBGE usa '-' para zero e '...' para dado nao disponivel. No Censo
+    2022 o '-' aparece 1.320 vezes, tipicamente nas categorias amarela e
+    indigena de municipios pequenos. Um int() direto derruba a carga.
+    """
+    if bruto is None:
+        return 0
+    texto = str(bruto).strip()
+    if texto in ("-", "", "..", "...", "X"):
+        return 0
+    try:
+        return int(float(texto))
+    except ValueError:
+        return 0
+
+
+def buscar(agregado: str, ano: str, classificacao: str) -> list:
+    url = f"{API}/{agregado}/periodos/{ano}/variaveis/93"
+    params = {"localidades": "N6[all]", "classificacao": classificacao}
+    for tentativa in range(1, MAX_TENTATIVAS + 1):
+        try:
+            resp = requests.get(url, params=params, timeout=TIMEOUT)
+        except (requests.exceptions.ReadTimeout,
+                requests.exceptions.ConnectionError) as e:
+            if tentativa == MAX_TENTATIVAS:
+                raise
+            print(f"   tentativa {tentativa} falhou ({type(e).__name__}), "
+                  f"esperando...", flush=True)
+            time.sleep(5 * tentativa)
+            continue
+        if resp.status_code >= 500 or resp.status_code == 429:
+            time.sleep(5 * tentativa)
+            continue
+        resp.raise_for_status()
+        return resp.json()
+    raise RuntimeError(f"agregado {agregado} falhou apos {MAX_TENTATIVAS} tentativas")
+
+
+def extrair(payload: list, ano: str, com_sexo: bool) -> dict:
+    """Desmonta a resposta aninhada do SIDRA numa tabela por municipio.
+
+    A estrutura e: variavel -> resultados -> (classificacoes, series), onde
+    cada bloco de resultado corresponde a uma combinacao de categorias e
+    traz a serie de todos os municipios.
+    """
+    municipios = {}
+    for variavel in payload:
+        for resultado in variavel.get("resultados", []):
+            classes = {}
+            for c in resultado.get("classificacoes", []):
+                cat = c.get("categoria", {})
+                if cat:
+                    codigo = next(iter(cat))
+                    classes[c.get("id")] = (codigo, cat[codigo])
+
+            cor = classes.get("86", (None, None))[0]
+            if cor not in CATEGORIAS:
+                continue
+            nome_cor = CATEGORIAS[cor]
+            sufixo = ""
+            if com_sexo:
+                sexo = classes.get("2", (None, None))[0]
+                if sexo == "4":
+                    sufixo = "_homens"
+                elif sexo == "5":
+                    sufixo = "_mulheres"
+                else:
+                    continue
+
+            for serie in resultado.get("series", []):
+                loc = serie.get("localidade", {})
+                cod = loc.get("id")
+                if not cod:
+                    continue
+                reg = municipios.setdefault(cod, {
+                    "codigo_ibge": cod,
+                    "municipio": loc.get("nome", ""),
+                })
+                reg[nome_cor + sufixo] = valor_para_int(
+                    serie.get("serie", {}).get(ano))
+    return municipios
+
+
+def main() -> int:
+    p = argparse.ArgumentParser(
+        description="Baixa a composicao de cor ou raca por municipio (Censo/SIDRA)")
+    p.add_argument("--ano", default="2022", choices=["2010", "2022"],
+                   help="periodo do censo (padrao: 2022)")
+    p.add_argument("--com-sexo", action="store_true",
+                   help="usa o agregado 9606 e quebra tambem por sexo")
+    p.add_argument("--saida", default="dados/proxy", help="pasta de saida")
+    args = p.parse_args()
+
+    agregado = "9606" if args.com_sexo else "9605"
+    cats = ",".join(CATEGORIAS)
+    # No 9606 as classificacoes sao separadas por pipe. A 287 (idade) fica
+    # fixada no total, senao voltam 134 faixas para cada municipio.
+    classificacao = f"86[{cats}]|2[4,5]|287[100362]" if args.com_sexo else f"86[{cats}]"
+
+    print(f"== Composicao de cor ou raca por municipio ==")
+    print(f"   IBGE, Censo {args.ano}, agregado {agregado}, todos os municipios")
+    print(f"   baixando (uma resposta grande, pode levar um minuto)...", flush=True)
+
+    inicio = time.time()
+    payload = buscar(agregado, args.ano, classificacao)
+    municipios = extrair(payload, args.ano, args.com_sexo)
+    print(f"   {len(municipios)} municipios em {time.time()-inicio:.0f}s")
+
+    if not municipios:
+        print("ERRO: nenhuma linha extraida -- a estrutura da resposta mudou?")
+        return 1
+
+    colunas_cor = list(CATEGORIAS.values())
+    if args.com_sexo:
+        colunas_cor = [c + s for c in CATEGORIAS.values()
+                       for s in ("_homens", "_mulheres")]
+
+    linhas = []
+    for cod in sorted(municipios):
+        r = municipios[cod]
+        valores = {c: r.get(c, 0) for c in colunas_cor}
+        total = sum(valores.values())
+        # Preta + parda = populacao negra, que e o agrupamento que o proprio
+        # IBGE usa nas analises de desigualdade racial. E a variavel que o
+        # indicador intersetorial do projeto vai consumir.
+        negra = sum(v for k, v in valores.items()
+                    if k.startswith("preta") or k.startswith("parda"))
+        linhas.append({
+            "codigo_ibge": cod,
+            "municipio": r.get("municipio", ""),
+            "ano_censo": args.ano,
+            **valores,
+            "total": total,
+            "pct_negra": round(100 * negra / total, 4) if total else None,
+        })
+
+    destino = Path(args.saida)
+    destino.mkdir(parents=True, exist_ok=True)
+    nome = f"cor_raca_municipio_{args.ano}" + ("_por_sexo" if args.com_sexo else "")
+    csv = destino / f"{nome}.csv"
+    cabecalho = list(linhas[0].keys())
+    with open(csv, "w", encoding="utf-8", newline="") as f:
+        f.write(",".join(cabecalho) + "\n")
+        for l in linhas:
+            campos = []
+            for c in cabecalho:
+                v = l[c]
+                if isinstance(v, str) and ("," in v or '"' in v):
+                    v = '"' + v.replace('"', '""') + '"'
+                campos.append("" if v is None else str(v))
+            f.write(",".join(campos) + "\n")
+
+    sem_dado = sum(1 for l in linhas if not l["total"])
+    pcts = sorted(l["pct_negra"] for l in linhas if l["pct_negra"] is not None)
+    print(f"\n== Gravado em {csv} ==")
+    print(f"   {len(linhas)} municipios, {len(cabecalho)} colunas")
+    if sem_dado:
+        print(f"   ATENCAO: {sem_dado} municipio(s) com total zero")
+    if pcts:
+        meio = pcts[len(pcts)//2]
+        print(f"\n   percentual de populacao negra (preta + parda) por municipio:")
+        print(f"     minimo  {pcts[0]:>6.1f}%   mediana {meio:>6.1f}%   "
+              f"maximo {pcts[-1]:>6.1f}%")
+    print(f"\n   Fonte para citar: IBGE, Censo Demografico {args.ano}, "
+          f"tabela {agregado} (SIDRA).")
+    print(f"   Este indicador descreve o MUNICIPIO, nunca uma pessoa.")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
