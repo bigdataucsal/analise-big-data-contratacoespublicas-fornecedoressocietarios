@@ -1,0 +1,345 @@
+{
+  "competencia": "2026-09-14",
+  "total_cnpjs_no_filtro": 3478,
+  "observacao": "Colunas gravadas como TEXTO, de propósito: zeros à esquerda são significativos em CNPJ, CEP, código de município e CNAE. A conversão de tipo pertence ao tratamento, e os tipos de origem estão em `colunas` abaixo. Datas vêm como AAAAMMDD com ausência representada por '00000000'; moeda vem com vírgula decimal.",
+  "arquivos": {
+    "CNAECSV": {
+      "parquet": "cnaecsv.parquet",
+      "linhas_gravadas": 1359,
+      "linhas_lidas_na_origem": 1359,
+      "colunas": [
+        {
+          "nome": "codigo",
+          "tipo_origem": "texto"
+        },
+        {
+          "nome": "descricao_cnae",
+          "tipo_origem": "texto"
+        }
+      ]
+    },
+    "EMPRECSV": {
+      "parquet": "emprecsv.parquet",
+      "linhas_gravadas": 3478,
+      "linhas_lidas_na_origem": 70085592,
+      "colunas": [
+        {
+          "nome": "cnpj_basico",
+          "tipo_origem": "texto"
+        },
+        {
+          "nome": "razao_social",
+          "tipo_origem": "texto"
+        },
+        {
+          "nome": "natureza_juridica",
+          "tipo_origem": "texto"
+        },
+        {
+          "nome": "qualificacao_responsavel",
+          "tipo_origem": "texto"
+        },
+        {
+          "nome": "capital_social",
+          "tipo_origem": "moeda"
+        },
+        {
+          "nome": "porte_empresa",
+          "tipo_origem": "texto"
+        },
+        {
+          "nome": "ente_federativo_responsavel",
+          "tipo_origem": "texto"
+        }
+      ]
+    },
+    "ESTABELE": {
+      "parquet": "estabele.parquet",
+      "linhas_gravadas": 49563,
+      "linhas_lidas_na_origem": 73366147,
+      "colunas": [
+        {
+          "nome": "cnpj_basico",
+          "tipo_origem": "texto"
+        },
+        {
+          "nome": "cnpj_ordem",
+          "tipo_origem": "texto"
+        },
+        {
+          "nome": "cnpj_dv",
+          "tipo_origem": "texto"
+        },
+        {
+          "nome": "identificador_matriz_filial",
+          "tipo_origem": "texto"
+        },
+        {
+          "nome": "nome_fantasia",
+          "tipo_origem": "texto"
+        },
+        {
+          "nome": "situacao_cadastral",
+          "tipo_origem": "texto"
+        },
+        {
+          "nome": "data_situacao_cadastral",
+          "tipo_origem": "data"
+        },
+        {
+          "nome": "motivo_situacao_cadastral",
+          "tipo_origem": "texto"
+        },
+        {
+          "nome": "nome_cidade_exterior",
+          "tipo_origem": "texto"
+        },
+        {
+          "nome": "pais",
+          "tipo_origem": "texto"
+        },
+        {
+          "nome": "data_inicio_atividade",
+          "tipo_origem": "data"
+        },
+        {
+          "nome": "cnae_fiscal_principal",
+          "tipo_origem": "texto"
+        },
+        {
+          "nome": "cnae_fiscal_secundaria",
+          "tipo_origem": "texto"
+        },
+        {
+          "nome": "tipo_logradouro",
+          "tipo_origem": "texto"
+        },
+        {
+          "nome": "logradouro",
+          "tipo_origem": "texto"
+        },
+        {
+          "nome": "numero",
+          "tipo_origem": "texto"
+        },
+        {
+          "nome": "complemento",
+          "tipo_origem": "texto"
+        },
+        {
+          "nome": "bairro",
+          "tipo_origem": "texto"
+        },
+        {
+          "nome": "cep",
+          "tipo_origem": "texto"
+        },
+        {
+          "nome": "uf",
+          "tipo_origem": "texto"
+        },
+        {
+          "nome": "municipio",
+          "tipo_origem": "texto"
+        },
+        {
+          "nome": "ddd_1",
+          "tipo_origem": "texto"
+        },
+        {
+          "nome": "telefone_1",
+          "tipo_origem": "texto"
+        },
+        {
+          "nome": "ddd_2",
+          "tipo_origem": "texto"
+        },
+        {
+          "nome": "telefone_2",
+          "tipo_origem": "texto"
+        },
+        {
+          "nome": "ddd_fax",
+          "tipo_origem": "texto"
+        },
+        {
+          "nome": "fax",
+          "tipo_origem": "texto"
+        },
+        {
+          "nome": "correio_eletronico",
+          "tipo_origem": "texto"
+        },
+        {
+          "nome": "situacao_especial",
+          "tipo_origem": "texto"
+        },
+        {
+          "nome": "data_situacao_especial",
+          "tipo_origem": "data"
+        }
+      ]
+    },
+    "MOTICSV": {
+      "parquet": "moticsv.parquet",
+      "linhas_gravadas": 63,
+      "linhas_lidas_na_origem": 63,
+      "colunas": [
+        {
+          "nome": "codigo",
+          "tipo_origem": "texto"
+        },
+        {
+          "nome": "descricao_motivo",
+          "tipo_origem": "texto"
+        }
+      ]
+    },
+    "MUNICCSV": {
+      "parquet": "municcsv.parquet",
+      "linhas_gravadas": 5572,
+      "linhas_lidas_na_origem": 5572,
+      "colunas": [
+        {
+          "nome": "codigo",
+          "tipo_origem": "texto"
+        },
+        {
+          "nome": "descricao_municipio",
+          "tipo_origem": "texto"
+        }
+      ]
+    },
+    "NATJUCSV": {
+      "parquet": "natjucsv.parquet",
+      "linhas_gravadas": 91,
+      "linhas_lidas_na_origem": 91,
+      "colunas": [
+        {
+          "nome": "codigo",
+          "tipo_origem": "texto"
+        },
+        {
+          "nome": "descricao_natureza_juridica",
+          "tipo_origem": "texto"
+        }
+      ]
+    },
+    "PAISCSV": {
+      "parquet": "paiscsv.parquet",
+      "linhas_gravadas": 255,
+      "linhas_lidas_na_origem": 255,
+      "colunas": [
+        {
+          "nome": "codigo",
+          "tipo_origem": "texto"
+        },
+        {
+          "nome": "descricao_pais",
+          "tipo_origem": "texto"
+        }
+      ]
+    },
+    "QUALSCSV": {
+      "parquet": "qualscsv.parquet",
+      "linhas_gravadas": 68,
+      "linhas_lidas_na_origem": 68,
+      "colunas": [
+        {
+          "nome": "codigo",
+          "tipo_origem": "texto"
+        },
+        {
+          "nome": "descricao_qualificacao_socio",
+          "tipo_origem": "texto"
+        }
+      ]
+    },
+    "SIMPLES": {
+      "parquet": "simples.parquet",
+      "linhas_gravadas": 2513,
+      "linhas_lidas_na_origem": 50396768,
+      "colunas": [
+        {
+          "nome": "cnpj_basico",
+          "tipo_origem": "texto"
+        },
+        {
+          "nome": "opcao_simples",
+          "tipo_origem": "texto"
+        },
+        {
+          "nome": "data_opcao_simples",
+          "tipo_origem": "data"
+        },
+        {
+          "nome": "data_exclusao_simples",
+          "tipo_origem": "data"
+        },
+        {
+          "nome": "opcao_mei",
+          "tipo_origem": "texto"
+        },
+        {
+          "nome": "data_opcao_mei",
+          "tipo_origem": "data"
+        },
+        {
+          "nome": "data_exclusao_mei",
+          "tipo_origem": "data"
+        }
+      ]
+    },
+    "SOCIOCSV": {
+      "parquet": "sociocsv.parquet",
+      "linhas_gravadas": 6868,
+      "linhas_lidas_na_origem": 28341092,
+      "colunas": [
+        {
+          "nome": "cnpj_basico",
+          "tipo_origem": "texto"
+        },
+        {
+          "nome": "identificador_socio",
+          "tipo_origem": "texto"
+        },
+        {
+          "nome": "nome_socio_razao_social",
+          "tipo_origem": "texto"
+        },
+        {
+          "nome": "cnpj_cpf_socio",
+          "tipo_origem": "texto"
+        },
+        {
+          "nome": "qualificacao_socio",
+          "tipo_origem": "texto"
+        },
+        {
+          "nome": "data_entrada_sociedade",
+          "tipo_origem": "data"
+        },
+        {
+          "nome": "pais",
+          "tipo_origem": "texto"
+        },
+        {
+          "nome": "representante_legal",
+          "tipo_origem": "texto"
+        },
+        {
+          "nome": "nome_representante",
+          "tipo_origem": "texto"
+        },
+        {
+          "nome": "qualificacao_representante_legal",
+          "tipo_origem": "texto"
+        },
+        {
+          "nome": "faixa_etaria",
+          "tipo_origem": "texto"
+        }
+      ]
+    }
+  }
+}
