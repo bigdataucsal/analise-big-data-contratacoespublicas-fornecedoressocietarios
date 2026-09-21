@@ -235,7 +235,14 @@ esse paralelo mostra que a decisão foi consciente e não improvisada.
 
 O CPF mascarado da Receita preserva os seis dígitos do meio, o que basta para
 agrupar o mesmo sócio entre empresas, que é exatamente o que a análise de rede
-precisa, sem identificar a pessoa. Ele é usado como chave interna na camada de
+precisa, sem identificar a pessoa.
+
+Vale registrar que essa máscara não é escolha da Receita nem nossa: o PDF de
+metadados do CNPJ declara que o CPF é descaracterizado por ocultação dos três
+primeiros dígitos e dos dois dígitos verificadores, citando o art. 129 § 2º da
+Lei nº 13.473/2017, a LDO de 2018. O dado já chega desidentificado por
+exigência legal, e esta regra apenas garante que não o reidentifiquemos ao
+longo do pipeline. Ele é usado como chave interna na camada de
 dados e substituído por identificador derivado antes de qualquer exibição.
 
 O filtro de agregação mínima fica na camada de apresentação e não nas visões

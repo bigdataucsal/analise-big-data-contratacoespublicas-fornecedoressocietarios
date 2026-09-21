@@ -27,11 +27,25 @@ contratado, e quais aparecem em múltiplas empresas fornecedoras.
 ## 1. Dados Abertos do CNPJ, da Receita Federal
 
 Fonte: PDF de metadados do CNPJ, publicado pela Receita Federal em
-`gov.br/receitafederal/dados/cnpj-metadados.pdf`. Arquivos em
+`gov.br/receitafederal/dados/cnpj-metadados.pdf`. São 6 páginas. Arquivos em
 `arquivos.receitafederal.gov.br/dados/cnpj/`.
 
-Os arquivos não têm linha de cabeçalho, então a coluna é identificada pela
-ordem posicional. A numeração abaixo é a do PDF oficial.
+A ordem das colunas abaixo foi **conferida diretamente contra esse PDF**, não
+tirada de documentação de terceiros. Os arquivos não têm linha de cabeçalho,
+então a coluna é identificada pela posição, e errar a ordem desloca o dado
+inteiro em silêncio.
+
+O que o PDF declara e o que ele não declara, porque a diferença importa:
+
+Ele declara a ordem e a descrição de cada campo, os códigos de domínio como
+os do porte da empresa e os do identificador de sócio, e o separador, que é
+ponto e vírgula. Declara também a regra de máscara do CPF, citada adiante.
+
+Ele **não** declara a codificação de caracteres, o delimitador de texto, o
+formato de data nem o separador decimal. Esses quatro vêm de implementações
+de parser já existentes e estão marcados como fonte secundária em
+`docs/mapa-colunas-receita.md`. Precisam ser conferidos contra o arquivo real
+quando o download concluir.
 
 ### Arquivo SOCIOS
 
@@ -40,7 +54,7 @@ ordem posicional. A numeração abaixo é a do PDF oficial.
 | 1 | CNPJ_BASICO | Q1, Q2, Q3 | chave de junção com a empresa contratada. É a raiz de 8 dígitos, não o CNPJ de 14 |
 | 2 | IDENTIFICADOR_DE_SOCIO | Q1, Q3 | separa sócio pessoa física de jurídica. 1 = PJ, 2 = PF, 3 = estrangeiro |
 | 3 | NOME_DO_SOCIO_OU_RAZAO_SOCIAL | Q1, Q2 | entrada da inferência de gênero |
-| 4 | CNPJ_CPF_DO_SOCIO | Q3 | CPF mascarado; identifica a mesma pessoa entre empresas |
+| 4 | CNPJ_CPF_DO_SOCIO | Q3 | CPF mascarado por exigência legal; identifica a mesma pessoa entre empresas |
 | 5 | QUALIFICACAO_DO_SOCIO | Q1, Q3 | define quem tem poder de controle |
 | 6 | DATA_DE_ENTRADA_SOCIEDADE | Q3 | quando o vínculo começou |
 | 11 | FAIXA_ETARIA | Q2 | dimensão demográfica; o painel exige filtro por faixa etária |
@@ -48,6 +62,15 @@ ordem posicional. A numeração abaixo é a do PDF oficial.
 Não usamos: PAIS (7), REPRESENTANTE_LEGAL (8), NOME_DO_REPRESENTANTE (9) e
 QUALIFICACAO_DO_REPRESENTANTE_LEGAL (10). O representante legal representa o
 sócio, não é sócio.
+
+Sobre a coluna 4, um ponto que sustenta o parecer de LGPD. O PDF declara que
+o CPF vem descaracterizado por ocultação dos três primeiros dígitos e dos
+dois dígitos verificadores, e cita a base legal: art. 129 § 2º da Lei nº
+13.473/2017, a LDO de 2018. Ou seja, a máscara não é escolha nossa nem
+gentileza da Receita, é cumprimento de norma, e o dado já chega
+desidentificado na origem. Os seis dígitos do meio que restam bastam para
+agrupar o mesmo sócio entre empresas, que é o que a Q3 precisa, sem
+identificar a pessoa. A RN-09 se apoia nisso.
 
 ### Arquivo EMPRESAS
 
