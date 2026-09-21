@@ -19,7 +19,7 @@ O presente projeto utiliza estritamente dados governamentais abertos, em conform
 ## 2. Ingestão e Classificação dos Tipos de Dado
 *(A ser preenchido na Semana 2 pelas Trilhas 2 e 4)*
 
-> Material pronto da Trilha 3: [docs/tipos-de-dado.md](docs/tipos-de-dado.md), com um trecho real colado de cada variedade, e [docs/bases-utilizadas.md](docs/bases-utilizadas.md), que declara a base oficial do tema e justifica cada base complementar.
+> Material pronto da Trilha 3: [docs/lista-colunas-uteis.md](docs/lista-colunas-uteis.md), a lista consolidada de colunas com a fonte de cada uma e a pergunta que atende; [docs/tipos-de-dado.md](docs/tipos-de-dado.md), com um trecho real colado de cada variedade; e [docs/bases-utilizadas.md](docs/bases-utilizadas.md), que declara a base oficial do tema e justifica cada base complementar.
 * Estruturado: 
 * Semi-estruturado: 
 * Não estruturado: 

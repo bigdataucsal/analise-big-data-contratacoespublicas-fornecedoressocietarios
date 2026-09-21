@@ -214,12 +214,42 @@ def main() -> int:
           f"irregular ficaram de fora das listas)")
 
     # --- o recorte por escrito ---
+    dias_cobertos = ""
+    dias_arq = Path(fonte).with_suffix(".dias")
+    if dias_arq.is_file():
+        marcados = [l for l in dias_arq.read_text(encoding="utf-8").splitlines() if l.strip()]
+        if marcados:
+            dias_cobertos = (f"{len(marcados)} dia(s), de {min(marcados)} a "
+                             f"{max(marcados)}")
+
     linhas = [
         "# Recorte congelado",
         "",
-        f"Gerado por `recorte_cnpjs.py` a partir de `{Path(fonte).name}`.",
+        "> **PRELIMINAR.** Esta lista NÃO é definitiva e não deve ser tratada",
+        "> como tal enquanto a coleta do PNCP não terminar.",
         "",
-        "## Criterios",
+        "## De onde veio",
+        "",
+        f"Arquivo de origem: `{Path(fonte).name}`, saída do `baixar_pncp_rapido.py`.",
+        "",
+        f"Cobertura: {dias_cobertos or 'não determinada'} de 365 dias do "
+        f"período definido em `config.py`.",
+        "",
+        "Esse arquivo de origem **não é versionado**, porque é dado bruto e",
+        "passa de 100 MB. Quem clonar o repositório recebe esta lista pronta,",
+        "mas não consegue regerá-la sem antes rodar a coleta:",
+        "",
+        "```bash",
+        "python baixar_pncp_rapido.py    # a coleta completa leva horas",
+        "python recorte_cnpjs.py         # aí sim regera a lista definitiva",
+        "```",
+        "",
+        "A lista está versionada justamente por isso: sem ela, quem for filtrar",
+        "os arquivos da Receita ficaria bloqueado esperando uma coleta de horas.",
+        "Ela serve para desenvolver e testar o parser contra dado real. O número",
+        "de CNPJs vai crescer quando a coleta fechar o ano.",
+        "",
+        "## Critérios",
         "",
         f"1. Periodo: {config.DATA_INICIAL_PNCP} a {config.DATA_FINAL_PNCP} "
         f"(definido em `config.py`).",
