@@ -19,7 +19,7 @@ ORGAOS_RECORTE = None      # ex: ["00394429000102"] (lista de CNPJs)
 # --- Receita Federal (CNPJ): snapshot mensal, nao e recorte por ano ---
 # Preenchido em tempo de execucao pelo cnpj-processor.get_latest_folder();
 # guardem aqui o valor usado de fato assim que descobrirem, para reprodutibilidade.
-MES_RECEITA = None  # ex: "2026-01" -- atualizem apos rodar baixar_receita.py
+MES_RECEITA = "2026-09-14"  # ex: "2026-01" -- atualizem apos rodar baixar_receita.py
 
 # --- Caminhos (relativos a raiz do repo, quando os scripts rodam de dentro de etl/) ---
 DIR_DADOS_RAW = "dados/raw"
