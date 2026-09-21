@@ -195,10 +195,23 @@ do IBGE.
 
 Isso importa diretamente para o proxy territorial de cor e raça. O PNCP nos dá
 o código IBGE do município, e o Censo, no SIDRA, também é chaveado por código
-IBGE. A Receita usa uma codificação própria, distribuída na tabela de domínio
-de municípios do próprio conjunto. Para ligar a empresa ao perfil racial do seu
-território é preciso passar por essa tabela de tradução, e não assumir que os
-códigos são compatíveis.
+IBGE. A Receita usa uma codificação própria, e a tabela de domínio de
+municípios que ela distribui traz apenas código e descrição, sem o código do
+IBGE: não há correspondência publicada junto com o conjunto.
+
+A solução está implementada em `etl/traduzir_municipios.py`, que casa por nome
+normalizado desambiguando por unidade federativa. A UF sai do próprio arquivo
+de estabelecimentos, onde ela convive com o código de município na mesma
+linha, o que resolve a ambiguidade entre municípios homônimos de estados
+diferentes.
+
+Uma sutileza da normalização que vale registrar, porque erra fácil e erra em
+silêncio: o apóstrofo tem que ser apagado, não trocado por espaço. O IBGE
+escreve "Alta Floresta D'Oeste" e a Receita escreve "ALTA FLORESTA DOESTE";
+trocando por espaço sairia "D OESTE" contra "DOESTE" e os dois não casariam.
+São 47 municípios com apóstrofo no nome, todos os "d'Oeste", "d'Água" e
+"D'Ávila", e eles cairiam fora do proxy territorial sem nenhum aviso. O hífen,
+ao contrário, vira espaço, porque é assim que a divergência aparece nele.
 
 ## Como as colunas atendem às perguntas
 

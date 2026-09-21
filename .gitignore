@@ -18,13 +18,41 @@ env/
 .DS_Store
 Thumbs.db
 
-# Dados do ETL: reprodutiveis a partir da API, nao versionar.
-# A raiz entra aqui porque os caminhos do config.py sao relativos -- rodar
-# o script da raiz do repo em vez de dentro de etl/ cria "dados/" aqui.
-dados/
+# --- Dados do ETL -------------------------------------------------------
+# Tudo aqui e reproduzivel a partir das APIs e dos arquivos publicos, e o
+# volume nao cabe no repositorio: so o bruto do PNCP ja passa de 100 MB e a
+# base da Receita passa de 80 GB compactada.
+*.jsonl
+*.jsonl.parcial
+*.parquet
+*.checkpoint
+# .dias e o estado de retomada do extrator do PNCP (dias concluidos).
+*.dias
+
+# Arvores de dado, por fonte. A "dados/" sem barra inicial casa em qualquer
+# profundidade, entao cobre tanto etl/dados/raw/ quanto uma arvore paralela.
+dados/raw/
 etl/dados/parquet/
 etl/dados/saida_postgres/
-etl/dados/raw/pncp/diario/
-*.parquet
-*.jsonl.parcial
-*.jsonl
+etl/dados/benchmark/
+etl/dados/cache/
+etl/dados/genero/
+etl/dados/proxy/
+inventario/
+etl/inventario/
+
+# A barra inicial ancora na raiz: e a arvore que aparece quando alguem roda
+# um script da raiz do repo em vez de dentro de etl/.
+/dados/
+
+# --- Excecao: o recorte E versionado ------------------------------------
+# dados/recorte/ nao e dado bruto, e DECISAO: a lista de CNPJs que define o
+# universo da analise. A trilha de engenharia de dados precisa dela para
+# filtrar os arquivos da Receita, e regerar exigiria ter o bruto do PNCP,
+# que esta ignorado. Sao ~90 KB. Por isso entra no repositorio, e por isso
+# as regras acima nao podem excluir a pasta inteira -- o git nao reinclui
+# arquivo cujo diretorio pai foi excluido.
+!etl/dados/recorte/
+!etl/dados/recorte/*.txt
+!etl/dados/recorte/*.csv
+!etl/dados/recorte/*.md

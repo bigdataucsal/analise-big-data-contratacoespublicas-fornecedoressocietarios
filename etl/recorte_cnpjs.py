@@ -11,12 +11,21 @@ Pode rodar antes do download terminar: sai uma lista preliminar, boa para
 a T2 desenvolver e testar o parser, e depois e so rodar de novo para
 gerar a definitiva.
 
-Saida (em dados/recorte/):
-    cnpjs_completos.txt   um CNPJ de 14 digitos por linha
-    cnpjs_raiz.txt        um CNPJ raiz de 8 digitos por linha  <- e este que
-                          casa com o arquivo de socios da Receita
+Saida (em config.DIR_RECORTE, que e etl/dados/recorte/):
+    cnpjs_raiz.csv        CSV com cabecalho `cnpj_basico`, um por linha.
+                          E ESTE o arquivo que o baixar_receita.py consome:
+                              python baixar_receita.py
+                                  --filtrar-cnpjs dados/recorte/cnpjs_raiz.csv
+    cnpjs_raiz.txt        a mesma lista sem cabecalho, para leitura humana
+    cnpjs_completos.txt   CNPJ de 14 digitos, para conferencia. NAO serve de
+                          filtro: o quadro societario e chaveado pela raiz,
+                          e filtrar por 14 digitos devolveria zero linhas.
     orgaos_recorte.csv    os orgaos escolhidos, com contratos e valor
     recorte.md            o recorte por escrito, para o README
+
+Esta e a unica pasta de dados que vai para o repositorio, porque e decisao
+e nao dado bruto: quem for filtrar os arquivos da Receita precisa dela, e
+regerar exigiria ter o bruto do PNCP, que nao e versionado.
 
 Uso (rodar de dentro de etl/):
     python recorte_cnpjs.py                      # top 50 orgaos, corte em 1 bi
@@ -92,8 +101,8 @@ def main() -> int:
                         f"{CORTE_SANIDADE_PADRAO:.0f}). Ver o cabecalho do arquivo.")
     p.add_argument("--sem-corte-sanidade", action="store_true",
                    help="mantem os outliers (nao recomendado; distorce o recorte)")
-    p.add_argument("--saida", default="dados/recorte",
-                   help="pasta de saida (padrao: dados/recorte)")
+    p.add_argument("--saida", default=config.DIR_RECORTE,
+                   help="pasta de saida (padrao: config.DIR_RECORTE)")
     args = p.parse_args()
 
     fonte = fonte_contratos(Path(config.DIR_DADOS_RAW))
@@ -188,10 +197,19 @@ def main() -> int:
     (destino / "cnpjs_completos.txt").write_text("\n".join(completos) + "\n", encoding="utf-8")
     (destino / "cnpjs_raiz.txt").write_text("\n".join(raizes) + "\n", encoding="utf-8")
 
+    # CSV com cabecalho `cnpj_basico`: e o formato que o baixar_receita.py
+    # espera em --filtrar-cnpjs, e `cnpj_basico` e o nome que a propria
+    # Receita da a essa coluna. O .txt continua existindo para leitura
+    # humana e para quem quiser usar em shell.
+    (destino / "cnpjs_raiz.csv").write_text(
+        "cnpj_basico\n" + "\n".join(raizes) + "\n", encoding="utf-8")
+
     print(f"\n== Listas geradas em {destino} ==")
-    print(f"   cnpjs_completos.txt : {br(len(completos), 0)} CNPJ de 14 digitos")
-    print(f"   cnpjs_raiz.txt      : {br(len(raizes), 0)} raizes de 8 digitos "
-          f"<- use esta no arquivo de socios")
+    print(f"   cnpjs_raiz.csv      : {br(len(raizes), 0)} raizes de 8 digitos "
+          f"<- e esta que alimenta o baixar_receita.py")
+    print(f"   cnpjs_raiz.txt      : mesma lista, sem cabecalho")
+    print(f"   cnpjs_completos.txt : {br(len(completos), 0)} CNPJ de 14 digitos "
+          f"(conferencia; o filtro da Receita e pela raiz)")
     print(f"   ({pf} fornecedor(es) pessoa fisica ou com identificador "
           f"irregular ficaram de fora das listas)")
 

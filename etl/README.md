@@ -3,12 +3,33 @@
 Documenta os scripts de extração e tratamento. Os números aqui foram medidos
 contra a API do PNCP em 19/09/2026, não estimados.
 
+> **Ordem de execução.** Os scripts se encadeiam, e a ordem importa porque o
+> filtro da Receita depende do recorte, que depende do PNCP:
+>
+> ```bash
+> python baixar_pncp_rapido.py                              # 1. contratos
+> python tratar_contratos.py                                # 2. trata e tipa
+> python recorte_cnpjs.py                                   # 3. define o universo
+> python baixar_receita.py --filtrar-cnpjs                  # 4. quadro societário
+> python baixar_proxy_racial.py                             # 5. Censo por município
+> python traduzir_municipios.py                             # 6. fecha a chave de município
+> python inferir_genero.py --arquivo <nomes dos sócios>     # 7. RN-04
+> ```
+>
+> Os passos 1 e 5 são independentes e podem rodar em paralelo. O passo 4 lê a
+> lista que o 3 grava, e o 6 precisa dos dois lados, Receita e Censo.
+
 ```
-    API do PNCP
-         │
-         │  baixar_pncp_rapido.py        (janela diária + paralelismo)
+    API do PNCP                            Dados Abertos do CNPJ
+         │                                  (Receita Federal)
+         │  baixar_pncp_rapido.py                  │
+         ▼                                         │ baixar_receita.py
+    dados/raw/pncp/contratos_2025_completo.jsonl   │   --filtrar-cnpjs
+         │                                         ▼
+         │  recorte_cnpjs.py ────────────►  dados/parquet/receita/*.parquet
+         │      dados/recorte/cnpjs_raiz.csv        + _manifesto.json
+         │  (única pasta de dados versionada)
          ▼
-    dados/raw/pncp/contratos_2025_completo.jsonl
          │
          │  tratar_contratos.py          (DuckDB: achata, tipa, deduplica)
          ▼
