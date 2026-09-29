@@ -1,5 +1,6 @@
 .env
 .env.*
+!.env.example
 *.pem
 *.key
 .terraform/
@@ -15,6 +16,12 @@ env/
 *.zip
 .DS_Store
 Thumbs.db
+
+.env
+terraform.tfvars
+*.tfstate
+*.tfstate.backup
+.terraform/
 
 # --- Dados do ETL -------------------------------------------------------
 # Tudo aqui e reproduzivel a partir das APIs e dos arquivos publicos, e o
