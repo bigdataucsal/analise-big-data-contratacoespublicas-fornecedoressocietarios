@@ -33,11 +33,24 @@ MES_RECEITA = "2026-09-14"  # ex: "2026-01" -- atualizem apos rodar baixar_recei
 # o cwd. Quem ja prefixava com a raiz do repositorio (`REPO_ROOT / DIR_...`)
 # continua funcionando sem alteracao, porque `Path(a) / Path(b)` devolve `b`
 # quando `b` e absoluto.
+import os as _os
 from pathlib import Path as _Path
 
 _DIR_BASE = _Path(__file__).resolve().parent          # .../etl
 
-DIR_DADOS_RAW = str(_DIR_BASE / "dados" / "raw")
+# Cada pessoa pode definir caminhos locais no etl/.env (ignorado pelo Git).
+# Sem python-dotenv ou sem a variavel, vale o caminho padrao abaixo.
+try:
+    from dotenv import load_dotenv as _load_dotenv
+    _load_dotenv(_DIR_BASE / ".env")
+except ImportError:
+    pass
+
+# Os dados brutos (ZIP da Receita, JSONL do PNCP) podem ficar fora do projeto,
+# por exemplo fora do OneDrive. Defina DIR_DADOS_RAW no etl/.env, sem aspas:
+#     DIR_DADOS_RAW=C:\dados-bigdata\raw
+# Vazio ou ausente: usa etl/dados/raw, como antes.
+DIR_DADOS_RAW = _os.getenv("DIR_DADOS_RAW") or str(_DIR_BASE / "dados" / "raw")
 DIR_DADOS_PARQUET = str(_DIR_BASE / "dados" / "parquet")
 DIR_INVENTARIO = str(_DIR_BASE / "inventario")
 
