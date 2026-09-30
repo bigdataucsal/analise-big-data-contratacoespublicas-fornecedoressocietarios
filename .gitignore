@@ -58,3 +58,9 @@ etl/dados/proxy/
 !etl/dados/parquet/receita/
 !etl/dados/parquet/receita/*.parquet
 !etl/dados/parquet/receita/_manifesto.json
+
+# dados gerados e artefatos de verificação
+etl/dados/parquet/
+etl/dados/auditoria_*.csv
+etl/dias_incompletos.txt
+etl/verificacao_pncp.csv
