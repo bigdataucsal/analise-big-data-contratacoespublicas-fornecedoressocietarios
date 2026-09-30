@@ -50,7 +50,19 @@ O presente projeto utiliza estritamente dados governamentais abertos, em conform
 > [docs/regras-de-negocio.md](docs/regras-de-negocio.md): RN-01 a RN-09 escritas, cada uma com enunciado, justificativa e o número medido que a sustenta.
 
 ## 7. Infraestrutura, Deploy e IaC
-*(A ser preenchido pela Trilha 1 detalhando o uso do Terraform e Aiven)*
+A infraestrutura de dados do projeto foi projetada com foco em automação, reprodutibilidade e gestão rigorosa de credenciais.
+
+Banco de Dados em Nuvem: O serviço adotado foi o PostgreSQL hospedado na plataforma Aiven. A escolha justifica-se pela alta disponibilidade e suporte nativo a ferramentas de automação de infraestrutura.
+
+Infrastructure as Code (IaC): O provisionamento do banco de dados não ocorreu de forma manual. Todo o ambiente foi automatizado utilizando Terraform. Os manifestos de configuração (main.tf, variables.tf e outputs.tf) encontram-se no diretório /terraform. O arquivo .terraform.lock.hcl foi versionado para garantir o congelamento das versões de provedor, garantindo reprodutibilidade em qualquer máquina.
+
+Segurança e Gestão de Segredos: Para atender aos critérios de segurança da informação, aplicamos as seguintes diretrizes:
+
+Nenhuma credencial sensível, como chaves de API (AIVEN_API_TOKEN) ou URLs de conexão com senha (DATABASE_URL), é exposta no repositório. Elas são gerenciadas exclusivamente via variáveis de ambiente.
+
+O arquivo .env contendo dados reais e os arquivos de estado do Terraform (.terraform.tfstate), que poderiam vazar a estrutura da nuvem, estão rigidamente bloqueados pelo .gitignore.
+
+Fornecemos um arquivo .env.example na raiz do projeto como um template seguro (sem valores preenchidos), servindo de manual de integração para que a equipe configure os seus ambientes locais de forma padronizada.
 
 ## 8. Guia de Reprodução
 *(A ser preenchido na Semana 6 da Fase 2)*
