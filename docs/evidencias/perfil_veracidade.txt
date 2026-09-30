@@ -1,0 +1,42 @@
+﻿== Perfil de veracidade (ano inteiro) ==
+  contratos                                            2,023,134
+  orgaos distintos (orgao_cnpj)                        11,813
+  UFs                                                  27
+  municipios distintos (codigo_ibge)                   4,196
+  % anoContrato = 2024                                 7.05
+  % anoContrato = 2025                                 92.69
+  % anoContrato outro ou nulo                          0.25
+  % valorAcumulado nulo                                38.68
+  % identificador com 11 digitos                       3.76
+  % identificador fora de 11 e 14 digitos (ou ausente) 0.17
+  % valor inicial diferente do global                  2.13
+  % objeto com menos de 15 caracteres                  1.11
+  % assinatura antes de 2024                           0.23
+  % assinatura depois da publicacao                    0.14
+  % valor global zero ou negativo                      0.88
+  % nome do fornecedor vazio                           0.01
+  % com orgao subrogado                                0.31
+  % com unidade subrogada                              0.31
+  objeto: comprimento medio (caracteres)               160.30
+  objeto: comprimento maximo                           5,120
+  objeto: soma dos bytes (MB)                          334.60
+  valor global: mediana (valor > 0)                    3486.00
+  valor global: media (valor > 0)                      9,101,366.39
+  valor global: mediana (0 < valor < R$ 1 bi)          3484.00
+  valor global: media (0 < valor < R$ 1 bi)            384,638.09
+
+== Composicao por esfera (orgao_esfera) ==
+  orgao_esfera  contratos    pct
+0            M    1414059  69.89
+1            E     323014  15.97
+2            F     255470  12.63
+3            N      28397   1.40
+4            D       2194   0.11
+
+== Identificadores fora de 11 e 14 digitos, por tipo_pessoa ==
+  tipo_pessoa  contratos
+0          PE       3381
+
+== Contratos publicados por dia ==
+   media_dia  minimo  maximo  media_1_a_20_jan
+0     5543.0      31   12589            2938.0
