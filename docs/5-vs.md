@@ -84,9 +84,14 @@ aparecem em contratos dentro do recorte e só então filtramos os arquivos
 durante a leitura. No recorte nacional essa lista tem 239.605 raízes de CNPJ
 distintas, dos fornecedores pessoa jurídica dos contratos que passam no corte
 de sanidade e têm valor positivo, e o filtro as aplica sobre os 28,67 GB
-descompactados; o tamanho resultante é `[PENDENTE: medir a pasta
-dados/parquet/receita quando o filtro terminar]`. No recorte inicial, de 50
-órgãos, eram 3.478 raízes e 3,89 MB.
+descompactados, lidos direto dos ZIPs, sem extrair nada para o disco. Das 222,2
+milhões de linhas lidas (70.085.592 de empresas, 73.366.147 de
+estabelecimentos, 50.396.768 do Simples e 28.341.092 de sócios), o filtro
+manteve 1,31 milhão, 0,59%: 239.600 empresas (cinco das 239.605 raízes não
+constam do cadastro), 529.225 estabelecimentos, 201.427 registros do Simples e
+339.385 sócios. O tamanho em disco é `[PENDENTE: medir a pasta
+dados/parquet/receita]`. No recorte inicial, de 50 órgãos, eram 3.478 raízes e
+3,89 MB.
 
 ## Velocidade
 
@@ -136,8 +141,11 @@ restantes, levou 1,4 minuto para 7.660 contratos, com dois dias em paralelo,
 504. O arquivo final tem 2.023.134 linhas para 2.023.134 chaves distintas. As
 demais etapas foram rápidas: a conferência dos 365 dias contra a API levou
 cerca de 6 minutos, e o tratamento e a gravação em Parquet, 30,2 segundos. O
-filtro da Receita sobre os 28,67 GB `[PENDENTE: cronometrar; iniciado em
-30/09/2026 às 15:27]`.
+filtro da Receita sobre os 28,67 GB levou 1h24m50s (de 15:27 a 16:51 de
+30/09/2026), a cerca de 5,6 MB descompactados por segundo e 44 mil linhas por
+segundo; por arquivo, empresas levaram 13,5 minutos, estabelecimentos 36,4,
+Simples 22,2 e sócios 11,7. O gargalo seguinte foi a API de nomes do IBGE (v3,
+uma chamada por nome): 18.965 nomes em 107,7 minutos, cerca de 176 por minuto.
 
 A atualização periódica será feita por execução agendada no GitHub Actions,
 ingerindo apenas o período novo. Como o extrator registra os dias já
@@ -245,7 +253,7 @@ um achado: a amostra de janeiro não representava o ano.
 | Valor inicial diferente do valor global | 2,09% | 2,13% |
 | Objeto com menos de 15 caracteres | 1,69% | 1,11% |
 | Data de assinatura anterior a 2024 | 0,78% | 0,23% |
-| Valor global zero ou negativo | 0,70% | 0,88% (17.823) `[reconciliar com 17.578 do recorte_cnpjs.py]` |
+| Valor global zero ou negativo | 0,70% | 0,88% (17.823, igual em `medir_pendencias.py`, `perfil_veracidade.py` e `diagnostico_valores.py`) `[reconciliar com 17.578 do recorte_cnpjs.py]` |
 | Assinatura posterior à publicação | 0,16% | 0,14% |
 | Nome do fornecedor vazio | 0,02% | 0,01% |
 
@@ -259,13 +267,15 @@ têm `anoContrato` 2024 (92,69% têm 2025 e 0,25% têm outro valor ou nenhum), e
 efeito da escolha entre as duas datas é pequeno.
 
 Sobre os identificadores: no ano inteiro, o tipo de fornecedor é PJ em
-1.941.824 contratos (96,0%), PF em 74.433 (3,7%) e PE, estrangeiro, em cerca de
-6.900 (0,3%). Todos os identificadores com tamanho diferente de 11 e de 14
+1.941.824 contratos (96,0%), PF em 74.433 (3,7%) e PE, estrangeiro, em 6.877
+(0,3%). Todos os identificadores com tamanho diferente de 11 e de 14
 dígitos pertencem ao tipo PE, cujo documento não segue o formato brasileiro, de
 modo que não são erro de digitação. Em 1.979 contratos (0,10%) o tipo de
 pessoa contradiz o tamanho do documento: 1.472 "PJ" com 11 dígitos e 507 "PF"
-com 14. Dois contratos não têm identificador de fornecedor. Os fornecedores PF
-não têm quadro societário a ser cruzado e formam um universo separado.
+com 14. Dois contratos não têm identificador de fornecedor. Não cruzam com a Receita,
+por não terem raiz de CNPJ, 1.474 contratos PJ, todos os 74.433 de PF e todos os
+6.877 de PE. Os fornecedores PF não têm quadro societário a ser cruzado e formam
+um universo separado.
 
 Sobre os sócios da Receita, nas 200 mil primeiras linhas de `Socios1.zip`
 (`[AMOSTRA]`, não aleatória): o campo `pais` é 99,71% nulo e
@@ -304,17 +314,25 @@ ou seja, quantos sócios controlam que parcela do valor contratado e quais
 aparecem em múltiplas empresas fornecedoras.
 
 O quinto elo já tem medição sobre a população à qual a regra se aplica, os
-sócios da Receita Federal. O piloto de inferência de gênero, rodado sobre mil
-sócios pessoa física de `Socios1.zip`, deixou 3,7% como indeterminado. No
-recorte inicial, de 3.478 empresas, os 6.377 sócios elegíveis ficaram 30,1%
-como femininos, 66,0% como masculinos e 3,9% como indeterminados, e 64,8% das
-empresas tiveram controle definido, sendo 30,3% delas de controle feminino
-`[AMOSTRA: recorte inicial; não usar como resultado]`. A primeira versão do
-método, rodada sobre fornecedores pessoa física, tinha dado 5,7% de
-indeterminados. Essa taxa é o que torna a inferência auditável: ela não é falha
-do método, é a medida explícita do que o método não consegue decidir. Os
-números definitivos saem do recorte nacional `[PENDENTE: rodar
-classificar_empresas.py sobre o filtro novo da Receita]`.
+sócios da Receita Federal, agora no recorte nacional. Das 239.600 empresas do
+recorte, 174.599 têm linha de sócio na base e 65.001 não têm (27,1%); 62.880
+dessas são empresários individuais (26,2% do recorte), cujo titular não consta
+do quadro societário. Os 327.180 sócios pessoa física elegíveis ficaram 34,3%
+como femininos, 61,8% como masculinos e 4,0% como indeterminados (112.164,
+202.077 e 12.939), depois de classificar 28.048 primeiros nomes distintos
+contra a API v3 do Censo 2022. A taxa de indeterminados por sócio foi de 3,7%
+no piloto de mil sócios, 3,9% no recorte inicial e 4,0% no nacional; a primeira
+versão do método, sobre fornecedores pessoa física, tinha dado 5,7%. Pela regra
+RN-05, 131.423 empresas têm controle definido, 54,9% do recorte e 75,3% das que
+têm sócio na base: 39.904 femininas e 91.519 masculinas, ou seja, 30,4% de
+controle feminino entre as de controle definido, contra 30,3% no recorte
+inicial. As demais ficam como mistas ou indeterminadas: 26.817 sem maioria,
+8.282 com muitos sócios indeterminados e 8.076 com sócio pessoa jurídica. A
+fração de empresas com controle definido caiu de 64,8% para 54,9% porque os
+empresários individuais passaram de 8,8% para 26,2% do recorte. A taxa de
+indeterminados é o que torna a inferência auditável: ela não é falha do método,
+é a medida explícita do que o método não consegue decidir. Os 30,4% contam
+empresas, não valor `[PENDENTE: cruzar com o valor dos contratos, KPI 1]`.
 
 Vale notar que a terceira pergunta é a que mais restringe o desenho técnico,
 porque análise de rede exige ver todos os contratos de cada sócio dentro do
@@ -335,8 +353,9 @@ extremos e a sensibilidade do corte; `perfil_veracidade.py` recalcula os
 percentuais de qualidade; `medir_pendencias.py` mede a Receita; e
 `classificar_empresas.py` infere o gênero do controle. As medições são de
 30/09/2026, sobre a coleta completa de 2025 e a competência 2026-09-14 da
-Receita. Os itens marcados `[PENDENTE]` dependem do filtro da Receita e da classificação
-nacional de gênero. Os marcados `[AMOSTRA JAN]` são resultados de janeiro
+Receita. Os itens marcados `[PENDENTE]` dependem da medição do tamanho do filtro da
+Receita, do cruzamento do gênero com o valor dos contratos e da estimativa da
+fato. Os marcados `[AMOSTRA JAN]` são resultados de janeiro
 mantidos como histórico do método, com a comparação contra o ano inteiro na
 seção Veracidade: a coleta completa mostrou que a distribuição de janeiro não
 se repete ao longo do ano.

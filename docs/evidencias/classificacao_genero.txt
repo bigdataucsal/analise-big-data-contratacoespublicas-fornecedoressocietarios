@@ -1,0 +1,54 @@
+﻿== Genero das empresas do recorte (RN-03, RN-04, RN-05; limiar 90%) ==
+   empresas no recorte (emprecsv)      : 239,600
+   empresas com linha de socio         : 174,599
+   linhas de socios                    : 339,385 (PF 327,180 | PJ 12,203 | estrangeiro 2)
+   primeiros nomes distintos (elegiveis): 28,048; 28112 no cache, 0 a consultar
+
+
+== Qualificacoes dos socios pessoa fisica (RN-03) ==
+   conferir: quem esta como EXCLUIDA sai da conta de genero
+    49  Sócio-Administrador                            197157  entra
+    22  Sócio                                           84700  entra
+     5  Administrador                                   13835  entra
+    10  Diretor                                         13182  entra
+    16  Presidente                                      10579  entra
+    52  Sócio com Capital                                1699  entra
+     8  Conselheiro de Administração                     1614  entra
+    65  Titular Pessoa Física Residente ou Domiciliado   1609  entra
+    53  Sócio sem Capital                                1395  entra
+    30  Sócio Menor (Assistido/Representado)             1030  entra
+    38  Sócio Pessoa Física Residente no Exterior         134  entra
+    59  Produtor Rural                                    113  entra
+    54  Fundador                                           92  entra
+    29  Sócio Incapaz ou Relat.Incapaz (exceto menor)      29  entra
+    24  Sócio Comanditado                                   4  entra
+   ... e mais 3 qualificacoes
+
+== Socios elegiveis: 327,180 (AMOSTRA: recorte preliminar) ==
+   feminino        112,164 ( 34.3%)
+   masculino       202,077 ( 61.8%)
+   indeterminado    12,939 (  4.0%)
+   TAXA DE INDETERMINADOS POR SOCIO: 4.0%
+
+== Empresas (RN-05): 239,600 no recorte ==
+   masculino (maioria)                                  91,519   38.2%
+   sem_socio_na_base                                    65,001   27.1%
+   feminino (maioria)                                   39,904   16.7%
+   misto_ou_indeterminado (sem_maioria)                 26,817   11.2%
+   misto_ou_indeterminado (muitos_indeterminados)        8,282    3.5%
+   misto_ou_indeterminado (socio_pj)                     8,076    3.4%
+   indeterminado (sem_socio_elegivel)                        1    0.0%
+
+   empresas com controle definido (feminino ou masculino):
+     131,423 de 174,599 com socio na base (75.3%)
+     131,423 de 239,600 no recorte (54.9%)
+
+   naturezas juridicas das 65,001 empresas sem socio na base:
+      2135  Empresário (Individual)                                 62,880
+      1244  Município                                                  310
+      1120  Autarquia Municipal                                        290
+      3131  Entidade Sindical                                          253
+      1210  Consórcio Público de Direito Público (Associação Públic    212
+
+   detalhe por empresa em C:\Users\anaju\OneDrive\Documentos\big data\analise-big-data-contratacoespublicas-fornecedoressocietarios\etl\dados\genero\genero_por_empresa.csv
+   (CNPJ basico e contagens; sem nome e sem documento; os numeros sao de AMOSTRA)
