@@ -1,0 +1,28 @@
+== Teste comparativo, 02/10/2026 13:24 ==
+   DuckDB 1.5.5 | pandas 3.0.6 | Python 3.12.10 | 12 processadores logicos | Windows 11
+
+== Amostra: primeiras 1.000.000 linhas do fato.csv ==
+   fato: 1.000.000 contratos (apos o corte de sanidade)
+
+   tabela                      CSV      Parquet  reducao
+   fato                    60.8 MB      14.2 MB     4.3x
+   dim_fornecedor          11.3 MB       4.5 MB     2.5x
+   dim_municipio            0.2 MB       0.1 MB     2.6x
+
+== Consulta do KPI interseccional, 5 execucoes ==
+   (3 juncoes, agregacao com soma, contagem e mediana)
+
+   arquivos soltos com pandas     1a execucao   2.007s   mediana   1.691s   (min 1.603 / max 2.007)   12 linhas
+   motor colunar sobre Parquet    1a execucao   0.132s   mediana   0.078s   (min 0.077 / max 0.132)   12 linhas
+
+   O motor colunar foi 21.6x mais rapido nesta consulta (mediana).
+
+== Conferencia dos resultados ==
+   pandas   12 grupos | 954.729 contratos | valor total R$ 332.136.754.480,05
+   DuckDB   12 grupos | 954.729 contratos | valor total R$ 332.136.754.480,05
+   Os dois resultados sao identicos, grupo a grupo (contratos exatos; soma e mediana com tolerancia de R$ 0,01).
+   Atencao: 45.271 contratos da fato nao entram no resultado (fornecedor ou municipio sem correspondencia nas dimensoes, ou sem valor nas chaves).
+
+== O que falta ==
+   O tempo do PostgreSQL e medido por benchmark_postgres.py, no servico gratuito
+   da Aiven, com o mesmo fato.csv (rodar com --linhas igual a esta rodada).
