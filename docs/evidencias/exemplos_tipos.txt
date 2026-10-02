@@ -1,0 +1,75 @@
+=== SEMIESTRUTURADO: um contrato do PNCP (JSON, campos aninhados) ===
+chaves de topo: numeroControlePncpAta, codigoPaisFornecedor, orgaoEntidade, anoContrato, sequencialContrato, tipoContrato, numeroContratoEmpenho, categoriaProcesso, tipoPessoa, niFornecedor, nomeRazaoSocialFornecedor, tipoPessoaSubContratada, niFornecedorSubContratado, nomeFornecedorSubContratado, objetoContrato, valorInicial, valorParcela, valorGlobal, valorAcumulado, dataAssinatura, dataVigenciaInicio, dataVigenciaFim, identificadorCipi, urlCipi, unidadeOrgao, dataPublicacaoPncp, dataAtualizacaoGlobal, dataAtualizacao, emendaParlamentar, processo, informacaoComplementar, orgaoSubRogado, unidadeSubRogada, receita, numeroParcelas, numeroRetificacao, temRemanejamento, frutoAdesao, numeroControlePNCP, usuarioNome, numeroControlePncpCompra
+{
+  "numeroControlePncpAta": null,
+  "codigoPaisFornecedor": null,
+  "orgaoEntidade": {
+    "cnpj": "00394460005887",
+    "razaoSocial": "MINISTERIO DA ECONOMIA",
+    "poderId": "E",
+    "esferaId": "F"
+  },
+  "anoContrato": 2024,
+  "sequencialContrato": 7096,
+  "tipoContrato": {
+    "id": 1,
+    "nome": "Contrato (termo inicial)"
+  },
+  "numeroContratoEmpenho": "0900100/3166",
+  "categoriaProcesso": {
+    "id": 11,
+    "nome": "Alienação de bens móveis/imóveis"
+  },
+  "tipoPessoa": "PJ",
+  "niFornecedor": "06121879000106",
+  "nomeRazaoSocialFornecedor": "IMPERIO TRANSPORTES TURISTICOS LTDA",
+  "tipoPessoaSubContratada": null,
+  "niFornecedorSubContratado": null,
+  "nomeFornecedorSubContratado": null,
+  "objetoContrato": "Alienação de mercadorias apreendidas pela Receita Federal",
+  "valorInicial": 7000.0,
+  "valorParcela": 7000.0,
+  "valorGlobal": 7000.0,
+  "valorAcumulado": null,
+  "dataAssinatura": "2024-12-31",
+  "dataVigenciaInicio": "2024-12-31",
+  "dataVigenciaFim": "2025-01-30",
+  "identificadorCipi": null,
+  "urlCipi": null,
+  "unidadeOrgao": {
+    "ufNome": "Paraná",
+    "ufSigla": "PR",
+    "municipioNome": "Curitiba",
+    "codigoIbge": "4106902",
+    "codigoUnidade": "900100",
+    "nomeUnidade": "Superintendência Regional da Receita Federal do Brasil da 9ª Região Fiscal"
+  },
+  "dataPublicacaoPncp": "2025-01-01T00:30:03",
+  "dataAtualizacaoGlobal": "2025-01-01T00:30:03",
+  "dataAtualizacao": "2025-01-01T00:30:03",
+  "emendaParlamentar": null,
+  "processo": "10905720159202490",
+  "informacaoComplementar": null,
+  "orgaoSubRogado": null,
+  "unidadeSubRogada": null,
+  "receita": true,
+  "numeroParcelas": 1,
+  "numeroRetificacao": 0,
+  "temRemanejamento": null,
+  "frutoAdesao": null,
+  "numeroControlePNCP": "00394460005887-2-007096/2024",
+  "usuarioNome": "Ministério da Fazenda / Receita Federal",
+  "numeroControlePncpCompra": "00394460005887-1-000067/2024"
+}
+
+=== ESTRUTURADO: linhas de sócios da Receita (CSV sem cabeçalho, ';', latin-1) ===
+arquivo: Socios0.zip
+"12******";"2";"ZENIRA D. S. M.";"***XXXXXX**";"22";"20100805";"";"***000000**";"";"00";"6"
+"12******";"2";"DJANIRA Z. M.";"***XXXXXX**";"22";"20170809";"";"***000000**";"";"00";"9"
+"12******";"2";"LENICE M.";"***XXXXXX**";"49";"20190205";"";"***000000**";"";"00";"7"
+colunas, na ordem: cnpj_basico; identificador_de_socio; nome_do_socio; cnpj_cpf_do_socio; qualificacao; data_entrada; pais; representante_legal; nome_representante; qualificacao_representante; faixa_etaria
+
+=== NÃO ESTRUTURADO: objeto do contrato (texto livre) ===
+1) Contratação de empresa para a prestação dos serviços de publicação de extrato de licitações e avisos em jornal de grande circulação, sob demanda.
+2) Contratação de empresa para execução dos serviços de pavimentação em pedra tosca na Localidade de Pé da Serra, zona rural, junto a Secretaria de Obras, Infraestrutura e Urbanismo do Município de Uruburetama.
+3) CREDENCIAMENTO MEDICO ESPECIALIZADOS NA ÁREA DE GINECOLOGIA, OBSTETRICIA E PEDIATRIA, AFIM DE GARANTIR UM ATENDIMENTO DE QUALIDADE AOS USUARIOS DO SUS.
