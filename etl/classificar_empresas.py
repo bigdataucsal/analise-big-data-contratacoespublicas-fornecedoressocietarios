@@ -11,6 +11,10 @@ misto/indeterminado.
            fora. A regra e por PALAVRA na descricao da qualificacao (padrao:
            PROCURADOR e REPRESENTANTE) e o relatorio imprime todas as
            qualificacoes presentes, marcando quais entram, para o grupo revisar.
+           Atencao: isso NAO e a lista de codigos da RN-03. No recorte nacional
+           a regra por palavra nao tirou nenhuma linha, e entraram o 53 (socio
+           sem capital), o 54 e o 59, que a lista deixa de fora. A divergencia
+           esta declarada na RN-03; alinhar na Fase 2.
     RN-04  primeiro nome classificado pela API do Censo 2022 (limiar de 90%),
            com o cache do inferir_genero.py. Nome sem primeiro nome utilizavel
            conta como indeterminado.
@@ -226,7 +230,9 @@ def main() -> int:
     if len(quals_pf) > 15:
         print(f"   ... e mais {len(quals_pf) - 15} qualificacoes")
 
-    print(f"\n== Socios elegiveis: {total_socios:,} (AMOSTRA: recorte preliminar) ==")
+    # O rotulo de AMOSTRA que saia aqui ficou da primeira rodada; a rodada
+    # nacional (docs/evidencias/classificacao_genero.txt) saiu com ele por engano.
+    print(f"\n== Socios elegiveis: {total_socios:,} ==")
     for c in ("feminino", "masculino", "indeterminado"):
         print(f"   {c:15} {classes_socio[c]:>7,} ({pct(classes_socio[c], total_socios)})")
     print(f"   TAXA DE INDETERMINADOS POR SOCIO: {pct(classes_socio['indeterminado'], total_socios).strip()}")
@@ -248,7 +254,7 @@ def main() -> int:
             print(f"     {n:>5}  {naturezas.get(n, 'sem descricao')[:55]:55} {q:>6,}")
 
     print(f"\n   detalhe por empresa em {csv_saida}")
-    print("   (CNPJ basico e contagens; sem nome e sem documento; os numeros sao de AMOSTRA)")
+    print("   (CNPJ basico e contagens; sem nome e sem documento)")
     return 0
 
 

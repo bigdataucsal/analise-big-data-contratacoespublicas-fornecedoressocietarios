@@ -23,19 +23,24 @@ Saida (em config.DIR_RECORTE, que e etl/dados/recorte/):
     orgaos_recorte.csv    os orgaos escolhidos, com contratos e valor
     recorte.md            o recorte por escrito, para o README
 
-Esta e a unica pasta de dados que vai para o repositorio, porque e decisao
-e nao dado bruto: quem for filtrar os arquivos da Receita precisa dela, e
-regerar exigiria ter o bruto do PNCP, que nao e versionado.
+Do que sai daqui, so o recorte.md e o orgaos_recorte.csv vao para o
+repositorio. As listas de CNPJ deixaram de ser versionadas e precisam ser
+regeradas a partir do bruto do PNCP, que tambem nao e versionado.
 
 Uso (rodar de dentro de etl/):
-    python recorte_cnpjs.py                      # top 50 orgaos, corte em 1 bi
+    python recorte_cnpjs.py --todos-orgaos       # recorte nacional, o usado no projeto
+    python recorte_cnpjs.py                      # top 50 orgaos (plano inicial, abandonado)
     python recorte_cnpjs.py --top-orgaos 100
     python recorte_cnpjs.py --sem-corte-sanidade # mantem os outliers
-    python recorte_cnpjs.py --todos-orgaos       # sem recorte de orgao
+
+O filtro "valor > 0" daqui le o valor do JSON bruto. O tratamento grava o valor
+em centavos, e por isso a fato tem 245 contratos a menos no ano: valores
+positivos menores que meio centavo, que viram zero (RN-02).
 
 Sobre o corte de sanidade
 -------------------------
-Medido em 20/09/2026 sobre 58.769 contratos (1 a 20 de janeiro):
+Medido em 20/09/2026 sobre 58.769 contratos (1 a 20 de janeiro), contando os
+de valor zero:
 
     mediana do contrato  R$      4.153,50
     media                R$ 45.013.038,24     <- 10.837x a mediana
@@ -55,10 +60,17 @@ significa nada.
 O limite de R$ 1 bilhao e defensavel mas e uma escolha: e uma ordem de
 grandeza acima do maior contrato federal plausivel para um unico objeto.
 Documentem o valor escolhido e quantos contratos ele exclui.
+
+Atualizacao de 02/10/2026: tudo acima e de janeiro e fica como historico. No
+ano inteiro sao 243 contratos acima de R$ 1 bilhao, com 95,77% do valor bruto,
+e o maior passa de R$ 6 trilhoes. Parte e erro de escala e parte parece teto
+estimado de credenciamento, hipotese ainda a confirmar. Os numeros do ano estao
+em docs/5-vs.md e na RN-02.
 """
 
 import argparse
 import sys
+from datetime import datetime
 from pathlib import Path
 
 import duckdb
@@ -214,54 +226,69 @@ def main() -> int:
           f"irregular ficaram de fora das listas)")
 
     # --- o recorte por escrito ---
-    dias_cobertos = ""
+    marcados = []
     dias_arq = Path(fonte).with_suffix(".dias")
     if dias_arq.is_file():
         marcados = [l for l in dias_arq.read_text(encoding="utf-8").splitlines() if l.strip()]
-        if marcados:
-            dias_cobertos = (f"{len(marcados)} dia(s), de {min(marcados)} a "
-                             f"{max(marcados)}")
+    dias_cobertos = (f"{len(marcados)} dia(s), de {min(marcados)} a {max(marcados)}"
+                     if marcados else "")
+    dias_periodo = (datetime.strptime(config.DATA_FINAL_PNCP, "%Y%m%d")
+                    - datetime.strptime(config.DATA_INICIAL_PNCP, "%Y%m%d")).days + 1
+    # So e preliminar enquanto a coleta nao cobre o periodo. O texto fixo de
+    # antes dizia PRELIMINAR sempre, inclusive no recorte do ano inteiro.
+    preliminar = len(marcados) < dias_periodo
+    # O comando vai no arquivo para quem for regerar. So as opcoes que mudam a
+    # lista; o --saida fica de fora para nao gravar caminho local de ninguem.
+    opcoes = []
+    if args.todos_orgaos:
+        opcoes.append("--todos-orgaos")
+    elif args.top_orgaos != TOP_ORGAOS_PADRAO:
+        opcoes.append(f"--top-orgaos {args.top_orgaos}")
+    if args.sem_corte_sanidade:
+        opcoes.append("--sem-corte-sanidade")
+    elif args.corte_sanidade != CORTE_SANIDADE_PADRAO:
+        opcoes.append(f"--corte-sanidade {args.corte_sanidade:.0f}")
+    comando = " ".join(["python recorte_cnpjs.py"] + opcoes)
 
-    linhas = [
-        "# Recorte congelado",
-        "",
-        "> **PRELIMINAR.** Esta lista NÃO é definitiva e não deve ser tratada",
-        "> como tal enquanto a coleta do PNCP não terminar.",
-        "",
+    linhas = ["# Recorte congelado", ""]
+    if preliminar:
+        linhas += [
+            "> **PRELIMINAR.** Esta lista NÃO é definitiva e não deve ser tratada",
+            "> como tal enquanto a coleta do PNCP não cobrir o período inteiro.",
+            "",
+        ]
+    linhas += [
         "## De onde veio",
         "",
         f"Arquivo de origem: `{Path(fonte).name}`, saída do `baixar_pncp_rapido.py`.",
         "",
-        f"Cobertura: {dias_cobertos or 'não determinada'} de 365 dias do "
+        f"Cobertura: {dias_cobertos or 'não determinada'} de {dias_periodo} dias do "
         f"período definido em `config.py`.",
         "",
-        "Esse arquivo de origem **não é versionado**, porque é dado bruto e",
-        "passa de 100 MB. Quem clonar o repositório recebe esta lista pronta,",
-        "mas não consegue regerá-la sem antes rodar a coleta:",
+        "Nem esse arquivo de origem nem as listas de CNPJ geradas aqui são",
+        "versionados: o bruto passa de 100 MB. Para regerar a lista é preciso",
+        "rodar a coleta e depois este script, com o mesmo comando:",
         "",
         "```bash",
         "python baixar_pncp_rapido.py    # a coleta completa leva horas",
-        "python recorte_cnpjs.py         # aí sim regera a lista definitiva",
+        f"{comando}    # o comando que gerou este arquivo",
         "```",
-        "",
-        "A lista está versionada justamente por isso: sem ela, quem for filtrar",
-        "os arquivos da Receita ficaria bloqueado esperando uma coleta de horas.",
-        "Ela serve para desenvolver e testar o parser contra dado real. O número",
-        "de CNPJs vai crescer quando a coleta fechar o ano.",
         "",
         "## Critérios",
         "",
         f"1. Periodo: {config.DATA_INICIAL_PNCP} a {config.DATA_FINAL_PNCP} "
         f"(definido em `config.py`).",
-        "2. Contratos com valor global maior que zero.",
+        "2. Contratos com valor global maior que zero, lido no JSON bruto. A RN-02 "
+        "passou a contar o valor em centavos; a diferenca esta explicada em "
+        "`docs/regras-de-negocio.md`.",
     ]
     if not args.sem_corte_sanidade:
         linhas.append(
             f"3. Contratos com valor global ate R$ {br(args.corte_sanidade)}. "
-            f"Acima disso sao erros de digitacao na origem, nao contratos: na "
-            f"base medida, {fora_alto[0]} registros concentravam "
-            f"{100*fora_alto[1]/soma_tudo:.1f}% do valor somado, com os maiores "
-            f"passando de R$ 500 bilhoes em um unico contrato.")
+            f"Acima disso o valor nao e plausivel como contrato (erro de escala "
+            f"ou, como hipotese ainda a confirmar, teto estimado de "
+            f"credenciamento): na base medida, {fora_alto[0]} registros "
+            f"concentravam {100*fora_alto[1]/soma_tudo:.1f}% do valor somado.")
     if not args.todos_orgaos:
         linhas.append(f"4. Os {args.top_orgaos} orgaos com maior valor contratado "
                       f"apos os criterios acima (lista em `orgaos_recorte.csv`).")
@@ -277,13 +304,16 @@ def main() -> int:
     linhas += [
         f"- {br(len(raizes), 0)} raizes de CNPJ distintas, que formam o filtro "
         f"aplicado aos arquivos da Receita Federal",
-        "",
-        "## Observacao",
-        "",
-        "A lista e preliminar enquanto o download do PNCP nao terminar. Ela serve "
-        "para desenvolver e testar o parser da Receita; basta rodar este script de "
-        "novo ao fim da coleta para gerar a definitiva.",
     ]
+    if preliminar:
+        linhas += [
+            "",
+            "## Observacao",
+            "",
+            "A lista e preliminar enquanto a coleta do PNCP nao cobrir o periodo. "
+            "Ela serve para desenvolver e testar o parser da Receita; basta rodar "
+            "este script de novo ao fim da coleta para gerar a definitiva.",
+        ]
     (destino / "recorte.md").write_text("\n".join(linhas) + "\n", encoding="utf-8")
     print(f"   recorte.md          : o recorte por escrito, para o README")
     return 0
