@@ -1,0 +1,50 @@
+Evidencia: rodada do benchmark no PostgreSQL com a fato completa (--linhas 0)
+Data: 02/10/2026
+Servico: Aiven plano gratuito (1 CPU, 1 GB de RAM, 1 GB de disco), PostgreSQL 18.6
+Saida do terminal copiada sem alteracao, exceto os caminhos locais, abreviados com "...".
+Resultado: a carga terminou, mas a primeira consulta (sem indices) encerrou com
+"SSL connection has been closed unexpectedly". A causa nao foi confirmada.
+
+=== Bloco 1: saida do script ===
+
+python benchmark_postgres.py --linhas 0
+== PostgreSQL 18.6 | tamanho do banco antes: 8,1 MB ==
+
+== Carga ==
+   fato              2.005.068 linhas  (27.8 s)
+   dim_fornecedor      243.297 linhas  (3.4 s)
+   dim_municipio         5.570 linhas  (0.5 s)
+
+== Consulta sem indices ==
+Traceback (most recent call last):
+  File ".../etl/benchmark_postgres.py", line 235, in main
+    tempos, linhas = medir(cur, args.repeticoes)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File ".../etl/benchmark_postgres.py", line 158, in medir
+    cur.execute(CONSULTA)
+psycopg2.OperationalError: SSL connection has been closed unexpectedly
+
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File ".../etl/benchmark_postgres.py", line 292, in <module>
+    sys.exit(main())
+             ^^^^^^
+  File ".../etl/benchmark_postgres.py", line 281, in main
+    cur.execute(f"DROP SCHEMA IF EXISTS {SCHEMA} CASCADE")
+psycopg2.InterfaceError: cursor already closed
+
+=== Bloco 2: medicao posterior, no mesmo servico, antes de apagar o schema ===
+O script nao conseguiu apagar o schema "bench". Um script curto em Python mediu o
+tamanho das tabelas carregadas (ainda sem indices, que nao chegaram a ser criados)
+e depois executou DROP SCHEMA IF EXISTS bench CASCADE.
+
+banco antes de limpar: 204 MB
+dim_fornecedor 19 MB
+dim_municipio 616 kB
+fato 177 MB
+banco depois de limpar: 7982 kB
+
+Observacao: o console da Aiven, na mesma sessao de testes, mostrava memoria em 80%,
+armazenamento em 62,8% de 1 GB e picos de CPU perto de 100% (ver aiven_uso_do_no.png).

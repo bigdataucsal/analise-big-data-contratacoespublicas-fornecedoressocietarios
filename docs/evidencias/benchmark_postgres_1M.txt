@@ -1,0 +1,38 @@
+== PostgreSQL 18.6 | tamanho do banco antes: 8,2 MB ==
+
+   *** ENSAIO COM AMOSTRA: os tempos NAO sao comparaveis com o DuckDB/pandas. ***
+   *** Use esta rodada para o tamanho das tabelas. Para tempos: --linhas 0. ***
+
+== Carga ==
+   fato              1.000.000 linhas  (97.9 s)
+   dim_fornecedor      243.297 linhas  (2.6 s)
+   dim_municipio         5.570 linhas  (0.5 s)
+
+== Consulta sem indices ==
+   sem indices
+     1a execucao 14.574 s | mediana 15.259 s (min 11.873 / max 16.548) | 12 linhas
+     tempo de execucao no servidor (EXPLAIN ANALYZE): 14.292 s
+
+== Criando indices de juncao ==
+   indices criados em 32.3 s
+
+== Consulta com indices ==
+   com indices
+     1a execucao 12.441 s | mediana 9.204 s (min 6.764 / max 12.441) | 12 linhas
+     tempo de execucao no servidor (EXPLAIN ANALYZE): 6.010 s
+
+   arquivos temporarios gerados pelas consultas: 1.164,1 MB (contam na cota de disco; estatistica pode atrasar alguns segundos)
+
+== Tamanho real no PostgreSQL (com indices) ==
+   tabela                  total        dados      indices
+   dim_fornecedor        27,3 MB      19,5 MB       7,7 MB
+   dim_municipio          0,8 MB       0,6 MB       0,1 MB
+   fato                 111,3 MB      92,5 MB      18,7 MB
+   soma                 139,4 MB
+
+   fato projetada para 2.005.068 linhas: ~223.2 MB (extrapolacao linear. NAO medicao)
+   Atencao: esta fato tem so 5 colunas; a fato reduzida final tera mais.
+
+   tamanho do banco depois da carga: 147,6 MB
+
+   schema bench apagado.
