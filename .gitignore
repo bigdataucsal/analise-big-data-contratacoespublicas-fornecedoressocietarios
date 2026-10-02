@@ -69,3 +69,5 @@ etl/verificacao_pncp.csv
 *.tfstate.backup
 .terraform/
 etl/dados/recorte/cnpjs_*
+etl/dados/recorte/orgaos_recorte.csv
+etl/dados/recorte/orgaos_recorte.csv
