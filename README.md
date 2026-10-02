@@ -5,7 +5,7 @@ Repositório destinado ao projeto prático da disciplina de Big Data e Analytics
 
 ---
 
-## 1. Problema de Negócio e Parecer de LGPD
+## 1. Problema de Negócio e Escopo
 
 ### O Problema Analítico
 O Estado é o maior comprador do país, mas as bases de contratação pública não revelam quem são os donos do dinheiro que flui para os CNPJs fornecedores. Nosso pipeline cruza os contratos federais com o quadro societário da Receita Federal para responder:
@@ -13,42 +13,36 @@ O Estado é o maior comprador do país, mas as bases de contratação pública n
 2. **Concentração Societária:** Quantos sócios físicos controlam a maior parte do valor contratado através de múltiplas empresas?
 3. **Camada Interseccional:** Os setores e territórios onde empresas de controle feminino capturam mais recursos são os mesmos com maior presença de trabalhadores negros?
 
+### Recorte da Análise (Atualizado)
+* **Cobertura:** Nacional, englobando todo o ano de **2025** (substituindo o escopo inicial de apenas 50 órgãos).
+* **Contratos:** 100% dos dados foram conferidos contra a API, totalizando a extração de **2.023.134 contratos**.
+* **Receita Federal:** Base de dados utilizada com data de competência em **14/09/2026**.
+
 ### Parecer de Conformidade: LGPD e Dados Abertos
-O projeto utiliza estritamente dados governamentais abertos. Para garantir conformidade com a LGPD:
-* O CPF não é armazenado em texto claro e aplicamos agregação mínima nos dashboards.
-* **Solução Adotada (Proxy Ecológico):** Rejeitamos o cruzamento nominal com bases de raça autodeclarada. O indicador racial é atribuído ao *contexto da empresa* (município e setor), mapeando para onde o recurso flui, não a cor do indivíduo. *(Documentação completa: `docs/parecer-lgpd.md`)*
+O projeto utiliza estritamente dados governamentais abertos. Para garantir conformidade com a LGPD, o CPF não é armazenado em texto claro e aplicamos agregação mínima nos dashboards. Adotamos a solução de **Proxy Ecológico** para o recorte racial, atribuindo o indicador ao contexto da empresa (município e setor), sem cruzamento nominal.
 
 ---
 
 ## 2. Estrutura do Repositório
 
 O projeto está modularizado nas seguintes pastas principais:
-
 * `docs/`: Documentação de regras de negócio, dicionários de dados, justificativas arquiteturais e evidências.
-* `etl/`: Scripts de extração, tratamento, carga (Python) e modelagem do banco (SQL)[cite: 1].
-* `terraform/`: Infraestrutura como Código (IaC) para provisionamento do banco de dados na nuvem[cite: 1].
-* `dashboard/`: Arquivos relativos à visualização de dados (em desenvolvimento)[cite: 1].
+* `etl/`: Scripts de extração, tratamento, carga (Python) e modelagem do banco (SQL).
+* `terraform/`: Infraestrutura como Código (IaC) para provisionamento do banco de dados na nuvem (aguardando confirmação do `plan` pela T1).
+* `dashboard/`: Arquivos relativos à visualização de dados (em desenvolvimento).
 
 ---
 
-## 3. Pipeline de Dados (ETL)
+## 3. Pipeline de Dados (ETL) e Volumetria
 
-Nossa engenharia de dados lida com a redução drástica de volume e tratamento de arquivos estruturados, semi-estruturados e não estruturados[cite: 1]. Os scripts estão organizados na pasta `etl/`[cite: 1]:
+Nossa engenharia de dados lida com a redução drástica de volume e tratamento de arquivos estruturados e semi-estruturados.
 
-**Ingestão de Dados:**
-* `baixar_pncp.py` / `baixar_pncp_rapido.py`: Consumo da API do Portal Nacional de Contratações Públicas[cite: 1].
-* `baixar_receita.py`: Download e filtragem dos dados abertos de CNPJs[cite: 1].
-* `baixar_transparencia.py` e `baixar_proxy_racial.py`: Consumo de bases complementares[cite: 1].
+**Ingestão e Volumetria:**
+* **Contratos (PNCP):** A coleta dos 2.023.134 contratos totalizou **3,62 GB** de dados brutos (`baixar_pncp.py`).
+* **Sócios e CNPJs (Receita):** A base original de 28,67 GB foi reduzida no parser para apenas **69,05 MB** (`baixar_receita.py`), mantendo **0,59%** das linhas úteis relativas ao nosso escopo.
 
-**Transformação e Limpeza:**
-* `tratar_contratos.py` e `recorte_cnpjs.py`: Limpeza de texto, normalização e filtragem do escopo[cite: 1].
-* `classificar_empresas.py` e `inferir_genero.py`: Aplicação das regras de negócio de diversidade[cite: 1].
-* `traduzir_municipios.py`: Padronização geográfica[cite: 1].
-
-**Testes e Auditoria:**
-* `diagnostico_valores.py` e `auditar_extremos.py`: Validação de outliers e veracidade de valores[cite: 1].
-* `perfil_veracidade.py` e `verificar_pncp.py`: Checagem da integridade dos contratos[cite: 1].
-* `benchmark_banco.py` e `comparar_pandas_postgres.py`: Testes de performance arquitetural[cite: 1].
+**Performance de Transformação:**
+* Nos benchmarks executados, o motor colunar demonstrou ser de **25 a 48 vezes mais rápido** que o processamento tradicional em Pandas.
 
 ---
 
@@ -56,26 +50,34 @@ Nossa engenharia de dados lida com a redução drástica de volume e tratamento 
 
 Optamos por um banco de dados **Relacional (PostgreSQL via Aiven)** estruturado em um modelo multidimensional (Estrela), ideal para responder à relação *muitos-para-muitos* entre CNPJs e Sócios. 
 
-* 📄 **Esquema SQL (PostgreSQL):** `etl/schema_postgres.sql`[cite: 1]
-* 📄 **Modelo Estrela (Fato/Dimensão):** `etl/schema_estrela.sql`[cite: 1]
-* ⚙️ **Carga:** `etl/carregar_aiven.py`[cite: 1]
-* 📖 **Dicionário de Dados:** `docs/dicionario-de-dados.md`[cite: 1]
+* **Armazenamento Fato:** A tabela fato inteira cabe no PostgreSQL, ocupando apenas **177 MB** sem índices.
+* **Estratégia de BI:** Como a consulta pesada na base inteira derrubou o nó gratuito da Aiven, a arquitetura do painel foi adaptada para ler exclusivamente **agregados materializados**.
+* **Arquivos-chave:** `etl/schema_postgres.sql` e `etl/schema_estrela.sql`.
 
 ---
 
 ## 5. Documentação Técnica e Regras de Negócio
 
-Todo o embasamento metodológico e de negócio está documentado na pasta `docs/`[cite: 1]:
-* 📐 `regras-de-negocio.md` e `decisoes-do-grupo.md`: Mapeamento das regras estritas (ex: Regra de Receita vs Despesa)[cite: 1].
-* 📊 `5-vs.md` e `tipos-de-dado.md`: Comprovação das características de Big Data do projeto[cite: 1].
-* 🏛️ `arquitetura.md` e `escolha-do-banco.md`: Justificativa do uso de relacional vs colunar[cite: 1].
-* 📋 `mapa-colunas-receita.md` e `lista-colunas-uteis.md`: De-Para das fontes de dados[cite: 1].
+Todo o embasamento técnico e metodológico está consolidado na pasta `docs/`:
+* 📊 `docs/5-vs.md` e `docs/tipos-de-dado.md`: Comprovação das características de Big Data.
+* 🏛️ `docs/escolha-do-banco.md`: Justificativa do relacional e comparativo de performance entre Pandas, DuckDB e PostgreSQL.
+* 📐 `docs/arquitetura.md`: Diagrama de arquitetura em Mermaid (pronto para exportação para os slides).
+* ⚙️ `docs/runbook-banco.md` e `docs/parser-receita.md`: Manuais de operação do banco e extração dos CNPJs.
+* ⚖️ `docs/parecer-lgpd.md` e `docs/decisoes-do-grupo.md`: Governança de dados e regras estritas do negócio.
+* 📂 `docs/evidencias/`: Diretório contendo os benchmarks nos três volumes, a documentação da falha de 2 milhões, o print da Aiven e o manifesto da Receita.
 
 ---
 
 ## 6. Infraestrutura e Segurança (IaC)
 
-A infraestrutura do banco de dados em nuvem é provisionada de forma automatizada.
-* **Ferramenta:** Arquivos localizados na pasta `terraform/` (`main.tf`, `variables.tf`, `outputs.tf`)[cite: 1].
-* **Provider:** Aiven (PostgreSQL).
-* **Segurança:** O arquivo de estado `.tfstate`, os arquivos `.env` e os exemplos como `terraform.tfvars.example`[cite: 1] e `.env.example`[cite: 1] garantem que credenciais nunca sejam expostas no versionamento.
+A infraestrutura na Aiven é provisionada via Terraform. 
+* **Segurança:** Nenhuma credencial é exposta no repositório. Arquivos como `.env`, `.terraform.tfstate`, `terraform.tfvars` e a URI do banco de dados são estritamente proibidos no versionamento do projeto.
+
+---
+
+## 7. Pendências e Próximos Passos
+
+- [ ] Incluir no repositório o log de execução do parser da Receita.
+- [ ] Documentar a contagem exata dos 245 contratos que foram identificados diretamente no JSON bruto.
+- [ ] **Fase 2 (KPI 1):** Implementar e validar o cálculo do Valor Total por Gênero.
+- [ ] **Regra D9:** Tratar e isolar os contratos classificados como "receita" (casos onde o fornecedor repassa valor ao órgão) para não inflacionar os indicadores de despesa do dashboard.
