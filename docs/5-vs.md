@@ -262,7 +262,7 @@ um achado: a amostra de janeiro não representava o ano.
 | Valor inicial diferente do valor global | 2,09% | 2,13% |
 | Objeto com menos de 15 caracteres | 1,69% | 1,11% |
 | Data de assinatura anterior a 2024 | 0,78% | 0,23% |
-| Valor global zero ou negativo | 0,70% | 0,88% (17.823, igual em `medir_pendencias.py`, `perfil_veracidade.py` e `diagnostico_valores.py`) `[reconciliar com 17.578 do recorte_cnpjs.py]` |
+| Valor global zero | 0,70% | 0,88% (17.823, igual em `medir_pendencias.py`, `perfil_veracidade.py` e `diagnostico_valores.py`) (nenhum valor negativo ou nulo; os 17.578 do recorte_cnpjs.py vêm do JSON bruto, e a diferença de 245 é compatível com valores positivos ínfimos que o tratamento arredonda a zero) |
 | Assinatura posterior à publicação | 0,16% | 0,14% |
 | Nome do fornecedor vazio | 0,02% | 0,01% |
 | `receita` verdadeira (contrato de receita para o órgão) | não medido | 1,02% do recorte (20.439 de 2.005.068; R$ 12,2 bi) |
@@ -368,8 +368,8 @@ mede o tamanho das tabelas no PostgreSQL (evidências em `docs/evidencias/`). As
 medições são de 30/09/2026, sobre a coleta completa de 2025 e a competência
 2026-09-14 da Receita, exceto o benchmark no PostgreSQL, de 02/10/2026. Os
 itens marcados `[PENDENTE]` dependem do cruzamento do gênero com o valor dos
-contratos (KPI 1), da reconciliação dos contratos de valor zero (17.823 contra
-17.578) e da conferência do número de nomes consultados na API do IBGE. Os
+contratos (KPI 1), da confirmação, no JSON bruto, dos 245 contratos de valor ínfimo,
+ e da conferência do número de nomes consultados na API do IBGE. Os
 marcados `[AMOSTRA JAN]` são resultados de janeiro mantidos como histórico do
 método, com a comparação contra o ano inteiro na seção Veracidade: a coleta
 completa mostrou que a distribuição de janeiro não se repete ao longo do ano.
