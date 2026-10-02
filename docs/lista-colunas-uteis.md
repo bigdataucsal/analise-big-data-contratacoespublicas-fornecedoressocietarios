@@ -42,10 +42,13 @@ os do porte da empresa e os do identificador de sócio, e o separador, que é
 ponto e vírgula. Declara também a regra de máscara do CPF, citada adiante.
 
 Ele **não** declara a codificação de caracteres, o delimitador de texto, o
-formato de data nem o separador decimal. Esses quatro vêm de implementações
+formato de data nem o separador decimal. Esses quatro vieram de implementações
 de parser já existentes e estão marcados como fonte secundária em
-`docs/mapa-colunas-receita.md`. Precisam ser conferidos contra o arquivo real
-quando o download concluir.
+`docs/mapa-colunas-receita.md`. A leitura completa da competência 2026-09-14,
+feita pela T2, confirmou a codificação latina, a data AAAAMMDD com ausência em
+oito zeros e a vírgula decimal (`docs/parser-receita.md`), e o trecho real em
+`docs/evidencias/exemplos_tipos.txt` mostra as aspas duplas. Essa confirmação
+não foi refeita nesta máquina, que não tem a base da Receita.
 
 ### Arquivo SOCIOS
 
@@ -166,28 +169,34 @@ etárias para cada município.
 
 ## 3. Base de nomes por sexo
 
-Fonte: IBGE, Censo Demográfico 2010, pela API de nomes versão 2 em
-`servicodados.ibge.gov.br/api/v2/censos/nomes/{nome}`. Sem chave, sem
-autenticação.
+Fonte: IBGE, Censo Demográfico 2022, pela API de nomes versão 3 em
+`servicodados.ibge.gov.br/api/v3/nomes/2022/nome/{nome}?tipo=nome&localidade=0`.
+Sem chave, sem autenticação. A base de nomes é a do Censo Demográfico 2022,
+consultada pela API v3 do IBGE; o roteiro cita o Censo 2010, base da API v2, que
+só foi usada no piloto inicial (5,7% de indeterminados) e não em nenhum número
+atual. O endereço da v3 foi capturado no site Nomes no Brasil
+(censo2022.ibge.gov.br/nomes) e não foi confirmado na documentação pública da
+API, e por isso cada resposta fica guardada em cache.
 
 | campo | serve a | por quê |
 |---|---|---|
-| nome | Q1, Q2 | o primeiro nome normalizado do sócio |
-| sexo (parâmetro) | Q1, Q2 | M ou F; são duas chamadas por nome |
-| res[].frequencia | Q1, Q2 | somadas dão o total por sexo |
+| nome (no endereço) | Q1, Q2 | o primeiro nome normalizado do sócio |
+| mulheres | Q1, Q2 | frequência feminina do nome no Brasil |
+| homens | Q1, Q2 | frequência masculina; uma chamada só traz os dois sexos |
 
-O denominador é sempre masculino mais feminino, nunca o total que a API
-devolve sem o parâmetro de sexo. A supressão do IBGE é aplicada célula a
-célula, então o total agregado é maior que a soma dos sexos.
+O denominador é sempre mulheres mais homens. Na API v2, o total sem o parâmetro
+de sexo era maior que a soma dos sexos, porque a supressão do IBGE é aplicada
+célula a célula; na v3, o campo `frequencia` já vem como a soma dos dois, mas a
+regra continua a mesma.
 
-Para uso em lote existe base consolidada derivada dessa mesma API, publicada
-pela Brasil.IO no conjunto Gênero dos Nomes, com cerca de cem mil nomes e a
-proporção dominante já calculada. Licença CC BY-SA 4.0, que é share-alike, e
-a atribuição exigida é literal: Fonte IBGE/Censo 2010, dados tratados por
-Álvaro Justen/Brasil.IO.
+A base consolidada da Brasil.IO (Gênero dos Nomes) não foi usada: ela deriva do
+Censo 2010, e o recorte coube na própria API v3 com cache (18.965 nomes
+consultados em 107,7 minutos).
 
-Situação: **implementado e testado** em `etl/inferir_genero.py`. Piloto sobre
-mil nomes deu 45,3% feminino, 49,0% masculino, 5,7% indeterminado.
+Situação: **aplicado** aos 327.180 sócios pessoa física do recorte nacional, pelo
+`etl/classificar_empresas.py`: 34,3% feminino, 61,8% masculino e 4,0%
+indeterminado. O piloto inicial, com a API v2 e sobre mil fornecedores pessoa
+física do PNCP, tinha dado 45,3%, 49,0% e 5,7%.
 
 ---
 
@@ -200,6 +209,8 @@ junção.
 | coluna | serve a | por quê |
 |---|---|---|
 | niFornecedor | Q1, Q2, Q3 | CNPJ do contratado; os 8 primeiros dígitos ligam ao quadro societário |
+| tipoPessoa | Q1, Q3 | PJ, PF ou PE; só PJ com catorze dígitos tem raiz de CNPJ (RN-01). O roteiro chama o campo de `tipoPessoaFornecedor`, nome que não existe no dado |
+| receita | Q1, Q2, Q3 | separa contrato de receita do de despesa; os de receita saem dos indicadores de valor (RN-02) |
 | valorGlobal | Q1, Q2, Q3 | a métrica de todas as perguntas |
 | orgaoEntidade.cnpj | Q1, Q3 | órgão contratante |
 | unidadeOrgao.codigoIbge | Q2 | município, em código IBGE |
@@ -212,10 +223,10 @@ junção.
 
 | fonte | o que entrega | situação |
 |---|---|---|
-| Receita Federal, CNPJ | quadro societário, CNAE, município da sede, porte | download pendente |
+| Receita Federal, CNPJ | quadro societário, CNAE, município da sede, porte | baixada e filtrada: 239.600 empresas e 339.385 sócios (competência 2026-09-14) |
 | IBGE, SIDRA agregado 9605 | composição de cor e raça dos 5.570 municípios | baixado |
-| IBGE, API de nomes | frequência por sexo, para inferir gênero | implementado |
-| PNCP | contratos, valores, órgãos | 58.769 de 2.023.236 baixados |
+| IBGE, API de nomes (Censo 2022) | frequência por sexo, para inferir gênero | aplicada aos sócios do recorte nacional |
+| PNCP | contratos, valores, órgãos | 2.023.134 contratos, o ano de 2025 completo, conferido dia a dia contra a API |
 
 ## Onde está o detalhamento
 

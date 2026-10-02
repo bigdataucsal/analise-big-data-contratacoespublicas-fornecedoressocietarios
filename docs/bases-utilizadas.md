@@ -44,12 +44,15 @@ completo de catorze dígitos.
 O layout completo, com a ordem posicional das colunas e as armadilhas, está em
 `docs/mapa-colunas-receita.md`.
 
-### IBGE, base de nomes do Censo 2010
+### IBGE, base de nomes do Censo 2022
 
 Necessária para a ODS 5. O registro societário não traz gênero, e o critério 4
 do barema exige análise interseccional de gênero cruzado com raça ou cor. O
 gênero precisa ser inferido, e a fonte oficial para isso é a frequência de
-nomes por sexo do Censo 2010, exposta por API pública.
+nomes por sexo do Censo, exposta por API pública. A base de nomes é a do Censo
+Demográfico 2022, consultada pela API v3 do IBGE; o roteiro cita o Censo 2010,
+base da API v2, que só foi usada no piloto inicial (5,7% de indeterminados) e
+não em nenhum número atual.
 
 A regra de inferência e a taxa de indeterminados medida estão na RN-04 e em
 `docs/fontes-genero-e-cor-raca.md`.
@@ -95,9 +98,9 @@ o critério de documentação avalia.
 
 | base | papel | situação |
 |---|---|---|
-| PNCP | oficial do tema, fatos de contrato | coleta em andamento |
-| Portal da Transparência (CGU) | oficial do tema, sanções CEIS e CNEP | extração em andamento |
-| Receita Federal, CNPJ | complementar indispensável, quadro societário | download pendente |
-| IBGE, nomes do Censo 2010 | complementar, inferência de gênero (ODS 5) | implementada e testada |
+| PNCP | oficial do tema, fatos de contrato | coleta de 2025 completa, 2.023.134 contratos |
+| Portal da Transparência (CGU) | oficial do tema, sanções CEIS e CNEP | script de extração pronto; uso na Fase 2, com a RN-08 |
+| Receita Federal, CNPJ | complementar indispensável, quadro societário | baixada e filtrada: 239.600 empresas e 339.385 sócios |
+| IBGE, nomes do Censo 2022 | complementar, inferência de gênero (ODS 5) | aplicada aos 327.180 sócios pessoa física do recorte |
 | IBGE, Censo 2022 via SIDRA | complementar, proxy territorial (ODS 18) | baixada, 5.570 municípios |
 | RAIS Vínculos | complementar, proxy setorial (ODS 18) | localizada, download pendente |

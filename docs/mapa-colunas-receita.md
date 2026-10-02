@@ -134,17 +134,25 @@ presidente, 64 de administrador judicial, e 70 a 73 para os residentes no
 exterior. Os códigos 28, 31, 49 e 74 pertencem a dois grupos ao mesmo tempo,
 porque são sócios que também administram.
 
-A armadilha está no segundo grupo. Muitos fornecedores pequenos do setor
-público são MEI, empresário individual ou sociedade unipessoal, e nesses casos
-o dono aparece com o código 50 ou 65, e não com o 22 de sócio. A RN-03 do
-roteiro, como está escrita, filtra por qualificação que indique participação
-societária ou administração, e uma leitura literal disso perderia essa faixa
-inteira de fornecedores. A regra precisa nomear os três grupos explicitamente.
+A armadilha está no segundo grupo. O titular de EIRELI aparece com o código 65,
+e não com o 22 de sócio. A RN-03 do roteiro, como está escrita, filtra por
+qualificação que indique participação societária ou administração, e uma
+leitura literal disso perderia esses titulares. A regra precisa nomear os três
+grupos explicitamente.
+
+Correção de 02/10/2026: a primeira versão deste parágrafo dizia que o MEI e o
+empresário individual também aparecem com o código 50 ou 65. O dado real
+mostrou que não: o empresário individual não tem quadro societário e não tem
+linha nenhuma no arquivo de sócios. No recorte nacional, 62.880 das 239.600
+empresas são empresários individuais sem sócio na base, e o código 65 aparece
+em só 1.609 linhas.
 
 Dois casos exigem decisão escrita. O código 53, de sócio sem capital, é
 formalmente sócio mas não participa do capital. E o código 63, de cotas em
 tesouraria, não é uma pessoa: são quotas da própria empresa, e costuma aparecer
-com nome e documento vazios. Precisamos declarar se entram ou não no cálculo.
+com nome e documento vazios. A decisão está na RN-03 (excluir os dois), e lá
+também está declarado que o script que gerou os números atuais ainda inclui o
+53.
 
 ## EMPRESAS
 
@@ -246,7 +254,9 @@ confirma o motivo com a fonte oficial.
 
 A RN-03, sobre definição de sócio com poder de controle, precisa nomear os
 códigos de qualificação de forma explícita, incluindo o grupo de titularidade,
-sob pena de perder os fornecedores MEI e empresário individual.
+sob pena de perder os titulares de EIRELI. Os empresários individuais, que não
+têm quadro societário, ficam fora de qualquer lista e são declarados à parte na
+RN-05.
 
 A RN-08, e por extensão toda afirmação sobre vínculo societário, precisa
 declarar que o quadro usado é o da competência baixada e não o da data do
@@ -264,7 +274,10 @@ Vieram de fonte secundária, ou seja, de implementações de parser já existent
 e não do PDF oficial: a codificação latina, o uso de aspas duplas nos campos de
 texto, o formato de data AAAAMMDD com ausência representada por oito zeros, a
 vírgula decimal no capital social, e a mudança de agosto de 2026 no formato do
-documento do sócio pessoa jurídica. Todos esses pontos devem ser verificados
-contra o arquivo real assim que a Trilha 2 concluir o download, e é exatamente
-para isso que serve o inventário da amostra que ela está produzindo em
-paralelo.
+documento do sócio pessoa jurídica. A leitura completa da competência
+2026-09-14, feita pela Trilha 2, confirmou a codificação latina, a data
+AAAAMMDD com ausência em oito zeros e a vírgula decimal no capital social
+(`docs/parser-receita.md`), e o trecho real em `docs/evidencias/exemplos_tipos.txt`
+mostra as aspas duplas. A mudança de agosto de 2026 no documento do sócio pessoa
+jurídica não foi medida. Nada disso foi refeito nesta máquina, que não tem a
+base da Receita.

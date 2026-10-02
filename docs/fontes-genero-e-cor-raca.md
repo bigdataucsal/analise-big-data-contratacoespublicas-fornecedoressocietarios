@@ -11,17 +11,26 @@ localizadas.
 
 ### A fonte
 
-A base é o Censo Demográfico de 2010, exposta pela API de nomes do IBGE em
-`servicodados.ibge.gov.br/api/v2/censos/nomes/{nome}`. Não exige chave nem
-autenticação.
+A base de nomes é a do Censo Demográfico 2022, consultada pela API v3 do IBGE; o
+roteiro cita o Censo 2010, base da API v2, que só foi usada no piloto inicial
+(5,7% de indeterminados) e não em nenhum número atual. O endereço da v3 é
+`servicodados.ibge.gov.br/api/v3/nomes/2022/nome/{nome}?tipo=nome&localidade=0`,
+capturado no site Nomes no Brasil em 29/09/2026 e não confirmado na documentação
+pública da API, e ele devolve numa chamada só as frequências de `mulheres` e
+`homens`.
 
-A consulta aceita o parâmetro `sexo` com valores M ou F, e devolve a série de
-frequências do nome por década de nascimento. Somando as frequências de cada
-série chega se ao total por sexo.
+O piloto, e boa parte do que esta seção descreve, usou a API v2, do Censo de
+2010, em `servicodados.ibge.gov.br/api/v2/censos/nomes/{nome}`. Nenhuma das duas
+exige chave nem autenticação. As observações sobre a v2 ficam registradas porque
+explicam os números do piloto.
 
-Um detalhe importante: sem o parâmetro `sexo`, a API devolve apenas o total
-agregado, com o campo sexo em nulo. Não existe uma chamada única que traga a
-quebra por sexo, então são duas requisições por nome.
+Na v2, a consulta aceita o parâmetro `sexo` com valores M ou F, e devolve a
+série de frequências do nome por década de nascimento. Somando as frequências de
+cada série chega se ao total por sexo.
+
+Um detalhe importante da v2: sem o parâmetro `sexo`, a API devolve apenas o
+total agregado, com o campo sexo em nulo. Não existe uma chamada única que traga
+a quebra por sexo, então são duas requisições por nome. A v3 resolveu isso.
 
 ### A regra de classificação
 
@@ -34,10 +43,12 @@ O denominador é sempre a soma de masculino mais feminino, nunca o total da
 chamada sem o parâmetro sexo. A razão é que a supressão de valores pequenos do
 IBGE é aplicada célula a célula, por nome, sexo, década e localidade, então o
 total agregado é maior que a soma dos sexos. Medimos essa diferença no nome
-ALEX: a soma por sexo dá 311.517 e o total agregado dá 311.536, dezenove
-ocorrências suprimidas. Usar o total agregado subestimaria a proporção.
+ALEX, na v2: a soma por sexo dá 311.517 e o total agregado dá 311.536, dezenove
+ocorrências suprimidas. Usar o total agregado subestimaria a proporção. Na v3 a
+diferença não aparece: o total de ALEX, 294.567, é exatamente a soma de 292.229
+homens e 2.338 mulheres (consultado em 02/10/2026). A regra fica como proteção.
 
-Três exemplos que ilustram a regra, medidos em 20 de setembro de 2026:
+Três exemplos que ilustram a regra, medidos em 20 de setembro de 2026, na v2:
 
 | nome | feminino | masculino | proporção | classificação |
 |---|---|---|---|---|
@@ -65,8 +76,9 @@ nome ausente.
 Variantes ortográficas contam como nomes diferentes, porque o IBGE registra
 como foi declarado. ANA e ANNA, LUIS e LUIZ são entradas distintas.
 
-O sexo é o autodeclarado no recenseamento de 2010, e é uma fotografia daquele
-momento. Nomes cujo uso mudou depois não estão refletidos.
+O sexo é o declarado no recenseamento, e é uma fotografia daquele momento: 2010
+na v2, e 1º de agosto de 2022 na v3. Nomes cujo uso mudou depois não estão
+refletidos.
 
 Por fim, a API não permite enumerar todos os nomes: o endpoint de ranking
 devolve no máximo os vinte primeiros por década. É preciso ter a própria lista
@@ -94,12 +106,19 @@ escolha dos 90% não é arbitrária nem frágil:
 | 99% | 10,0% |
 
 Uma observação metodológica sobre esse piloto. A RN-04 se aplica a sócios, que
-vêm da Receita Federal, e o download dessa base ainda não terminou. O piloto
+vêm da Receita Federal, e na época a base ainda não tinha sido baixada. O piloto
 rodou sobre fornecedores pessoa física do PNCP, que são nomes de pessoas reais
-do mesmo universo, a contratação pública brasileira. A taxa de 5,7% é portanto
-uma estimativa de ordem de grandeza, não o número final. Ele será recalculado
-sobre os sócios de verdade assim que a Trilha 2 entregar o arquivo, e é o
-número recalculado que deve ir ao relatório final.
+do mesmo universo, a contratação pública brasileira. A taxa de 5,7% era portanto
+uma estimativa de ordem de grandeza, não o número final.
+
+O número recalculado, que é o que vai ao relatório, já existe. Sobre os 327.180
+sócios pessoa física elegíveis do recorte nacional, com a API v3 e o Censo
+2022, o resultado foi 34,3% feminino, 61,8% masculino e 4,0% indeterminado, a
+partir de 28.048 primeiros nomes distintos (evidência em
+`docs/evidencias/classificacao_genero.txt`). A queda de 5,7% para 4,0% mistura a
+troca de população com a troca de base, e o que foi medido não permite separar
+as duas. A sensibilidade ao limiar da tabela acima é do piloto; nos sócios, ela
+fica para a Fase 2.
 
 Testamos também uma regra adicional, descartando nomes com frequência total
 abaixo de vinte por instabilidade estatística, e ela não mudou nada: zero
@@ -108,6 +127,11 @@ então nomes abaixo dele não chegam a aparecer. A regra fica no código como
 proteção, mas é redundante na prática.
 
 ### Para rodar em escala
+
+O que segue foi o plano para a v2 e não chegou a ser usado. Com a v3, o recorte
+nacional coube na própria API, consultando só os primeiros nomes distintos e
+guardando cada resposta em cache: 18.965 nomes em 107,7 minutos. A base da
+Brasil.IO deriva do Censo 2010, e por isso ficou de fora.
 
 Consultar nome a nome serve ao piloto, não a centenas de milhares de sócios.
 Existe base consolidada derivada exatamente dessa API, publicada pela Brasil.IO
@@ -278,10 +302,12 @@ entra em acordo com a Trilha 2.
 
 ## Como citar
 
-Para a inferência de gênero, a fonte primária é o IBGE, Censo Demográfico 2010,
-consultado pela API de nomes versão 2. Se a base consolidada da Brasil.IO for
-utilizada, a atribuição literal exigida é Fonte IBGE/Censo 2010, dados tratados
-por Álvaro Justen/Brasil.IO, e a licença share alike precisa ser mantida.
+Para a inferência de gênero, a fonte primária é o IBGE, Censo Demográfico 2022,
+consultado pela API de nomes versão 3, com o endereço do site Nomes no Brasil e a
+data de acesso. O piloto inicial usou o Censo Demográfico 2010, pela API versão
+2, e só ele. A base consolidada da Brasil.IO não foi usada; se vier a ser, a
+atribuição literal exigida é Fonte IBGE/Censo 2010, dados tratados por Álvaro
+Justen/Brasil.IO, e a licença share alike precisa ser mantida.
 
 Para a composição de cor ou raça, a fonte é o IBGE, Censo Demográfico 2022,
 tabela 9605 do SIDRA, consultada pela API de agregados versão 3.

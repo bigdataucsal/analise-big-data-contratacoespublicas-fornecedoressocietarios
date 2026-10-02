@@ -3,12 +3,31 @@
 Descreve as dez tabelas do modelo estrela, com origem, tipo e domínio de cada
 coluna. É um dos itens obrigatórios do README segundo o guia do projeto.
 
-As estatísticas de cardinalidade e domínio foram medidas sobre os 58.769
-contratos já coletados, de 1 a 20 de janeiro de 2025, e não estimadas. Quando a
-coleta do ano completo terminar elas mudam de magnitude, mas não de natureza.
+As estatísticas de cardinalidade e domínio das tabelas abaixo foram medidas
+sobre os 58.769 contratos de 1 a 20 de janeiro de 2025 `[AMOSTRA JAN]`, e não
+estimadas. A primeira versão deste documento dizia que, com o ano completo, elas
+mudariam de magnitude mas não de natureza. Isso não se confirmou em tudo: a
+coleta completa de 2025 (2.023.134 contratos) mudou a composição de alguns
+domínios. Os números do ano que importam para as regras estão na tabela a
+seguir; os demais valem só como retrato de janeiro.
 
-As colunas que virão da Receita Federal estão descritas pelo layout oficial,
-porque o download ainda não terminou. Elas estão marcadas como pendentes.
+| estatística | amostra de janeiro | ano inteiro |
+|---|---|---|
+| órgãos distintos | 3.495 | 11.813 |
+| contratos de órgão municipal | 56,3% | 69,89% |
+| contratos por tipo de fornecedor (PJ, PF e PE) | 57.142, 1.400 e 227 | 1.941.824, 74.433 e 6.877 |
+| contratos sem raiz de CNPJ | 1.650 | 82.784 |
+| raízes de CNPJ distintas (contratos PJ com catorze dígitos) | 20.436 | 243.297 |
+| `valorAcumulado` nulo | 55,99% | 38,68% |
+| valor inicial diferente do global | 2,09% | 2,13% |
+| mediana de `valor_global` (valor maior que zero) | R$ 4.260,00 (R$ 4.153,50 contando os zeros, número da primeira versão) | R$ 3.486,00 |
+| maior `valor_global` | R$ 640 bilhões | R$ 6,03 trilhões |
+| contratos acima de R$ 1 bilhão | 26, com 98,7% do valor | 243, com 95,77% do valor |
+
+As colunas da Receita Federal estão descritas pelo layout oficial. A Receita já
+foi baixada e filtrada (239.600 empresas, 529.225 estabelecimentos e 339.385
+sócios, competência 2026-09-14), mas ainda não foi carregada no banco, e por isso
+essas colunas continuam marcadas como pendentes.
 
 Convenções que valem para todo o modelo. Identificadores como CNPJ, CPF, CEP e
 código de município são sempre texto, nunca número, porque zeros à esquerda são
@@ -27,27 +46,29 @@ Grão: um contrato. É a tabela de fatos do modelo.
 | numero_controle_pncp | TEXT | PNCP `numeroControlePNCP` | chave natural, única. Formato `00394460005887-2-007096/2024` |
 | id_tempo_publicacao | INTEGER | derivada de `dataPublicacaoPncp` | eixo temporal padrão da coleta |
 | id_tempo_assinatura | INTEGER | derivada de `dataAssinatura` | pode divergir muito da publicação |
-| id_orgao | INTEGER | FK para dim_orgao | 3.495 órgãos distintos, nenhum nulo |
-| id_unidade | INTEGER | FK para dim_unidade | 4.215 unidades distintas |
-| id_fornecedor | INTEGER | FK para dim_fornecedor | nulo quando o fornecedor é pessoa física |
+| id_orgao | INTEGER | FK para dim_orgao | 3.495 órgãos distintos em janeiro (11.813 no ano), nenhum nulo |
+| id_unidade | INTEGER | FK para dim_unidade | 4.215 unidades distintas em janeiro |
+| id_fornecedor | INTEGER | FK para dim_fornecedor | nulo quando o fornecedor não tem raiz de CNPJ (pessoa física, estrangeiro ou identificador irregular); ver RN-01 |
 | id_tipo_contrato | INTEGER | FK para dim_tipo_contrato | 8 valores distintos |
 | id_categoria | INTEGER | FK para dim_categoria_processo | 11 valores distintos |
-| valor_global | NUMERIC(18,2) | PNCP `valorGlobal` | mediana R$ 4.153,50; ver RN-02 |
-| valor_inicial | NUMERIC(18,2) | PNCP `valorInicial` | mediana R$ 4.000,00; difere do global em 2,09% dos casos, indicando aditivo |
+| valor_global | NUMERIC(18,2) | PNCP `valorGlobal` | gravado em centavos, e é nesse valor que se aplica a RN-02. Mediana de R$ 3.486,00 no ano |
+| valor_inicial | NUMERIC(18,2) | PNCP `valorInicial` | mediana R$ 4.000,00 em janeiro; difere do global em 2,13% dos contratos do ano, indicando aditivo |
 | prazo_dias | INTEGER | derivada das datas de vigência | fim menos início |
 | ano_contrato | SMALLINT | PNCP `anoContrato` | varia de 2021 a 2025 |
 | numero_parcelas | SMALLINT | PNCP `numeroParcelas` | ver a nota de qualidade abaixo |
-| receita | BOOLEAN | PNCP `receita` | |
+| receita | BOOLEAN | PNCP `receita` | contrato de receita para o órgão, em que o fornecedor paga. Marcado e fora dos indicadores de valor (RN-02, D9). 1,02% dos contratos da fato no ano; a marca erra nos dois sentidos |
 | emenda_parlamentar | BOOLEAN | PNCP `emendaParlamentar` | normalizado: vem nulo quando falso em 99,8% dos casos |
 | fruto_adesao | BOOLEAN | PNCP `frutoAdesao` | mesma normalização |
 
 Duas notas de qualidade sobre esta tabela.
 
-A primeira, sobre valor. O máximo bruto de `valor_global` é de 640 bilhões de
-reais, e vinte e seis contratos acima de um bilhão concentram 98,7% do valor
-somado. São erros de digitação na origem, e a RN-02 os exclui. O dicionário
-registra o valor bruto para que ninguém se surpreenda ao consultar o dado antes
-do filtro.
+A primeira, sobre valor. O máximo bruto de `valor_global` no ano é de R$ 6,03
+trilhões, e 243 contratos acima de um bilhão concentram 95,77% do valor somado
+(em janeiro eram 26 contratos e 98,7%). Parte é erro de escala, e parte parece
+ser teto estimado de credenciamento, hipótese ainda a confirmar. Eles ficam fora
+da fato do banco e continuam listados no CSV de auditoria; a coluna que os marca
+no Parquet entra na Fase 2 (RN-02, D3). O dicionário registra o valor bruto para
+que ninguém se surpreenda ao consultar o dado antes do filtro.
 
 A segunda, sobre parcelas. O máximo de `numero_parcelas` é 54.000, contra uma
 mediana de 1. Um contrato com cinquenta e quatro mil parcelas não é plausível, e
@@ -76,14 +97,15 @@ Grão: um órgão contratante. Origem: objeto `orgaoEntidade` do PNCP.
 | coluna | tipo | origem | domínio medido |
 |---|---|---|---|
 | id_orgao | INTEGER | gerada | |
-| cnpj | TEXT | `orgaoEntidade.cnpj` | 3.495 distintos, único |
+| cnpj | TEXT | `orgaoEntidade.cnpj` | 3.495 distintos em janeiro (11.813 no ano), único |
 | razao_social | TEXT | `orgaoEntidade.razaoSocial` | espaços normalizados |
 | poder | TEXT | `orgaoEntidade.poderId` | E 30.863, N 24.917, L 1.985, J 1.004 |
 | esfera | TEXT | `orgaoEntidade.esferaId` | M 33.091, F 17.023, E 7.730, N 862, D 63 |
 
 A distribuição por esfera merece atenção analítica: a base é predominantemente
-municipal, com 56,3% dos contratos, e não federal. Isso tem consequência direta
-sobre heterogeneidade de preenchimento.
+municipal, com 69,89% dos contratos do ano (56,3% em janeiro), e não federal.
+Isso tem consequência direta sobre heterogeneidade de preenchimento. As
+contagens por poder e esfera da tabela acima são de janeiro.
 
 ## dim_unidade
 
@@ -129,9 +151,9 @@ mista: PNCP para identificação, Receita Federal para os atributos cadastrais.
 | coluna | tipo | origem | situação |
 |---|---|---|---|
 | id_fornecedor | INTEGER | gerada | |
-| cnpj_raiz | TEXT | derivada de `niFornecedor` | 20.436 distintos. Nulo para pessoa física |
+| cnpj_raiz | TEXT | derivada de `niFornecedor` | 20.436 distintos em janeiro, 243.297 no ano. Nunca nulo: só existe para PJ com catorze dígitos (RN-01) |
 | razao_social | TEXT | PNCP `nomeRazaoSocialFornecedor` | disponível |
-| tipo_pessoa | TEXT | PNCP `tipoPessoa` | PJ 57.142, PF 1.400, PE 227 |
+| tipo_pessoa | TEXT | PNCP `tipoPessoa` (o roteiro chama de `tipoPessoaFornecedor`) | contratos por tipo em janeiro: PJ 57.142, PF 1.400, PE 227. Na dimensão, só entra PJ |
 | natureza_juridica | TEXT | Receita, EMPRESAS coluna 3 | pendente. Grupo 1XXX identifica ente público |
 | porte | TEXT | Receita, EMPRESAS coluna 6 | pendente. 00 não informado, 01 micro, 03 pequeno, 05 demais |
 | capital_social | NUMERIC(18,2) | Receita, EMPRESAS coluna 5 | pendente. Vem com vírgula decimal |
@@ -142,8 +164,10 @@ mista: PNCP para identificação, Receita Federal para os atributos cadastrais.
 O grão é a raiz e não o CNPJ completo porque o quadro societário pertence à
 empresa, não ao estabelecimento. Ver RN-01.
 
-Os 1.650 registros sem `cnpj_raiz` são os fornecedores pessoa física e os de
-identificador irregular, que por definição não têm quadro societário.
+Os contratos sem raiz de CNPJ (1.650 em janeiro, 82.784 no ano) são os de
+fornecedor pessoa física, estrangeiro ou com identificador irregular, que por
+definição não têm quadro societário. Eles não entram nesta dimensão e ficam com
+`id_fornecedor` nulo na fato, formando o universo à parte da RN-01.
 
 ## dim_socio
 
@@ -165,7 +189,11 @@ insumo da inferência de gênero e é descartado, restando o identificador
 derivado. Essa é a aplicação concreta da RN-09.
 
 A coluna `genero` admite indeterminado como valor legítimo, e não como ausência.
-O piloto mediu 5,7% de indeterminados, e essa taxa é resultado, não falha.
+Nos 327.180 sócios pessoa física do recorte nacional, 4,0% ficaram
+indeterminados, e essa taxa é resultado, não falha. A base de nomes é a do Censo
+Demográfico 2022, consultada pela API v3 do IBGE; o roteiro cita o Censo 2010,
+base da API v2, que só foi usada no piloto inicial (5,7% de indeterminados) e
+não em nenhum número atual.
 
 ## ponte_empresa_socio
 
@@ -189,9 +217,10 @@ competência ficasse fora da chave, o modelo impediria por construção exatamen
 esse caminho.
 
 A coluna `grupo_qualificacao` é derivada porque filtrar por código solto é o
-erro clássico desse arquivo: usar apenas o código 22, de sócio, perderia MEI,
-empresário individual e sociedade unipessoal, onde o dono aparece como 50 ou 65.
-Os grupos estão enumerados na RN-03.
+erro clássico desse arquivo: usar apenas o código 22, de sócio, perderia o
+titular que aparece como 65, como o de EIRELI. O empresário individual e o MEI
+não aparecem no arquivo de sócios em código nenhum (ver RN-03 e RN-05). Os
+grupos estão enumerados na RN-03.
 
 ## Tabelas de domínio
 
@@ -248,11 +277,12 @@ Registrados para que a ausência seja decisão explícita e não esquecimento.
 O campo `objetoContrato`, texto livre, permanece na camada Parquet e não entra
 no PostgreSQL. A justificativa de custo está em `docs/escolha-do-banco.md`.
 
-Os campos `orgaoSubRogado` e `unidadeSubRogada` estão presentes em menos de 1%
-dos contratos e não são consumidos por nenhuma pergunta analítica.
+Os campos `orgaoSubRogado` e `unidadeSubRogada` vêm preenchidos em 0,31% dos
+contratos do ano (a chave existe em todos, com valor nulo) e não são consumidos
+por nenhuma pergunta analítica.
 
-O campo `valorAcumulado` é nulo em 55,99% dos registros, o que o inviabiliza
-como métrica principal.
+O campo `valorAcumulado` é nulo em 38,68% dos contratos do ano (55,99% em
+janeiro), o que ainda o inviabiliza como métrica principal.
 
 Os campos de telefone, fax e correio eletrônico dos estabelecimentos da Receita
 são dados pessoais de contato e não entram no modelo, por aplicação da RN-09.
