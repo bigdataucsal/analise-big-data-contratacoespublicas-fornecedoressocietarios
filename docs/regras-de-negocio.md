@@ -87,7 +87,8 @@ de recurso, mas ele esconde um detalhe. No ano, 17.823 contratos (0,88%) têm
 valor zero em centavos, e nenhum tem valor negativo ou nulo. O JSON bruto, lido
 antes do tratamento, tem 245 contratos a menos com valor zero, porque traz 245
 valores positivos menores que meio centavo, que o tratamento arredonda para
-R$ 0,00 ao gravar o valor com duas casas decimais. Nos 20 dias de janeiro que
+R$ 0,00 ao gravar o valor com duas casas decimais (contagem feita pela T2 no
+JSON bruto do ano, em 02/10/2026). Nos 20 dias de janeiro que
 reproduzimos, os casos desse tipo são todos de R$ 0,0001, valor simbólico que
 não representa pagamento `[AMOSTRA JAN]`. Por isso a regra vale para o valor em
 centavos, que é o que vai para o Parquet e para o banco.
@@ -178,9 +179,9 @@ Onde cada condição está implementada hoje:
 | não ser receita | não | não; o campo está no Parquet e na fato | Fase 2 (D9) |
 | não estar anulado ou cancelado | não | não | sem campo na coleta (D6) |
 
-Como a lista de raízes usou o valor bruto, ela tem no máximo 245 raízes a mais do
-que teria com a regra em centavos, menos de 0,1% das 239.605. O script será
-alinhado quando a lista for regerada, na Fase 2.
+Como a lista de raízes usou o valor bruto, ela tem 39 raízes a mais do que teria
+com a regra em centavos (239.605 contra 239.566, medido pela T2), menos de 0,02%
+da lista. O script será alinhado quando a lista for regerada, na Fase 2.
 
 ## RN-03. Definição de sócio com poder de controle
 

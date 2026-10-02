@@ -295,13 +295,13 @@ Parquet não tem valor negativo nem nulo, o bruto também não tem nulo (17.578 
 243 + 2.005.313 = 2.023.134), e os dois lados têm os mesmos 243 contratos acima
 de um bilhão, a diferença entre 17.823 e 17.578 só pode vir de valores entre
 zero e meio centavo: são 245. É o mesmo efeito que separa os 2.005.313 contratos
-do recorte dos 2.005.068 da fato do benchmark. A conta é dedução, feita com os
-números publicados e a leitura do código; a contagem direta no JSON bruto do ano
-não foi refeita nesta revisão, porque a coleta completa está na máquina da T2.
-O mecanismo foi reproduzido nos 20 dias de janeiro que temos localmente: 410
-contratos com valor zero no bruto, 415 em centavos, e a diferença são 5
-contratos de R$ 0,0001 `[AMOSTRA JAN]`. A RN-02 passou a valer para o valor em
-centavos.
+do recorte dos 2.005.068 da fato do benchmark. A dedução foi confirmada pela
+contagem direta no JSON bruto do ano, feita pela T2 em 02/10/2026: 17.578
+contratos com valor zero, 245 com valor positivo menor que meio centavo e nenhum
+nulo. O mecanismo também foi reproduzido nos 20 dias de janeiro que a T3 tem
+localmente: 410 contratos com valor zero no bruto, 415 em centavos, e a
+diferença são 5 contratos de R$ 0,0001 `[AMOSTRA JAN]`. A RN-02 passou a valer
+para o valor em centavos.
 
 Sobre os identificadores: no ano inteiro, o tipo de fornecedor é PJ em
 1.941.824 contratos (96,0%), PF em 74.433 (3,7%) e PE, estrangeiro, em 6.877

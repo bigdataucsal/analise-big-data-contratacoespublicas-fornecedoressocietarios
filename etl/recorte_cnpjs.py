@@ -23,9 +23,9 @@ Saida (em config.DIR_RECORTE, que e etl/dados/recorte/):
     orgaos_recorte.csv    os orgaos escolhidos, com contratos e valor
     recorte.md            o recorte por escrito, para o README
 
-Do que sai daqui, so o recorte.md e o orgaos_recorte.csv vao para o
-repositorio. As listas de CNPJ deixaram de ser versionadas e precisam ser
-regeradas a partir do bruto do PNCP, que tambem nao e versionado.
+Do que sai daqui, so o recorte.md vai para o repositorio. As listas de CNPJ
+e o orgaos_recorte.csv deixaram de ser versionados e precisam ser regerados a
+partir do bruto do PNCP, que tambem nao e versionado.
 
 Uso (rodar de dentro de etl/):
     python recorte_cnpjs.py --todos-orgaos       # recorte nacional, o usado no projeto
