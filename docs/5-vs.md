@@ -265,6 +265,7 @@ um achado: a amostra de janeiro não representava o ano.
 | Valor global zero ou negativo | 0,70% | 0,88% (17.823, igual em `medir_pendencias.py`, `perfil_veracidade.py` e `diagnostico_valores.py`) `[reconciliar com 17.578 do recorte_cnpjs.py]` |
 | Assinatura posterior à publicação | 0,16% | 0,14% |
 | Nome do fornecedor vazio | 0,02% | 0,01% |
+| `receita` verdadeira (contrato de receita para o órgão) | não medido | 1,02% do recorte (20.439 de 2.005.068; R$ 12,2 bi) |
 
 Sobre o `anoContrato`: como a consulta da API é por data de publicação, a coleta
 de janeiro captura majoritariamente contratos assinados no ano anterior. Isso

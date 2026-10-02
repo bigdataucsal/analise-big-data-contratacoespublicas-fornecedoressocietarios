@@ -12,6 +12,7 @@ Registradas em 01/10/2026, sem reunião, para destravar os documentos. Ficam suj
 | D6 | RN-02 | Documentar o que está implementado (valor maior que zero) e o que está **pendente** (excluir anulados e cancelados, se o campo existir na coleta). Conferir 17.578 × 17.823 contratos com valor zero antes de citar qualquer um dos dois. | Evita afirmar no README uma regra que o código não cumpre. | `5-vs.md`; README |
 | D7 | Data de referência | **Data de publicação no PNCP.** Declarar que 7,05% dos contratos têm `anoContrato` 2024. | A API consulta por data de publicação, e a diferença entre as duas datas é pequena. | README |
 | D8 | Fonte do Censo para nomes | A definir, na mesma frase em todos os documentos. O roteiro cita o Censo 2010; o código usa a API v3 do Censo 2022. | Consistência entre README, 5 V's e parecer. | README; `5-vs.md`; parecer |
+| D9 | Contratos de receita | Contratos com `receita = true` (20.439 no recorte, R$ 12,2 bi) são marcados, não apagados, e saem dos indicadores de valor e dos KPIs; entram só na descrição do universo. Aplicar na RN-02, na Fase 2. | O campo indica contrato de receita para o órgão: o fluxo é do fornecedor para o órgão, e não recurso público recebido por fornecedores. |
 
 ## Consequências práticas do banco gratuito
 
