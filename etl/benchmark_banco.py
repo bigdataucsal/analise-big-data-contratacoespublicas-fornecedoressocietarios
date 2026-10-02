@@ -161,10 +161,10 @@ def rodar_pandas():
     df = fato.merge(dim_f, on="cnpj_raiz_fornecedor", how="inner")
     df = df.merge(dim_m, on="codigo_ibge", how="inner")
 
-    df["faixa_pct_negra"] = pd.cut(df["pct_negra"], bins=[-1, 40, 70, 101],
+    df["faixa_pct_negra"] = pd.cut(df["pct_negra"], bins=[-1, 40, 70, 101], right=False,
                                    labels=["baixa", "media", "alta"])
     df["faixa_valor"] = pd.cut(df["valor_global"],
-                               bins=[-1, 10000, 100000, 1000000, float("inf")],
+                               bins=[-1, 10000, 100000, 1000000, float("inf")], right=False,
                                labels=["ate 10 mil", "10 mil a 100 mil",
                                        "100 mil a 1 mi", "acima de 1 mi"])
     r = (df.groupby(["faixa_pct_negra", "faixa_valor", "tipo_pessoa"],
