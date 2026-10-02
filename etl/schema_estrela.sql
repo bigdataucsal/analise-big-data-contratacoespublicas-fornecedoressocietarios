@@ -1,17 +1,19 @@
 -- Modelo estrela no Aiven for PostgreSQL.
 -- =====================================================================
 -- Substitui o schema_postgres.sql, que era uma tabela unica. Aquele
--- desenho nao cabia: medido, daria cerca de 1,9 GB entre dados e indices
--- para os 2 milhoes de contratos, contra um orcamento utilizavel de 500 a
--- 700 MB. O limite de 1 GB da Aiven e o DISCO do servico, nao a soma das
--- tabelas -- contam indices, WAL, arquivos temporarios de consulta e
--- bloat; so os backups ficam de fora.
+-- desenho nao cabia: estimado a partir da amostra de janeiro, daria cerca
+-- de 1,9 GB entre dados e indices para os 2 milhoes de contratos, contra um
+-- orcamento utilizavel de 500 a 700 MB. O limite de 1 GB da Aiven e o
+-- DISCO do servico, nao a soma das tabelas -- contam indices, WAL, arquivos
+-- temporarios de consulta e bloat; so os backups ficam de fora.
 --
 -- A normalizacao e o que resolve. Nome de orgao, de unidade, de municipio
 -- e de fornecedor se repetem milhoes de vezes na tabela unica; trocados
 -- por chave estrangeira de 4 bytes, os dados caem de cerca de 1,2 GB para
--- cerca de 560 MB. Com o recorte dos 50 maiores orgaos, para a ordem de
--- 135 MB.
+-- cerca de 560 MB (tambem estimativa de janeiro). O recorte dos 50 maiores
+-- orgaos, que levaria a uns 135 MB, foi abandonado: a cobertura e nacional.
+-- O que existe medido e uma fato de 5 colunas com os 2.005.068 contratos:
+-- 177 MB sem indices na Aiven (docs/escolha-do-banco.md).
 --
 -- Duas decisoes de modelagem valem defesa na apresentacao:
 --
@@ -20,10 +22,11 @@
 --    nao cabe numa dimensao comum e exige a tabela ponte. E ela que
 --    sustenta tanto o agregado de genero por empresa quanto a analise de
 --    concentracao societaria.
--- 2. O texto livre do objeto do contrato NAO entra aqui. Medido, ele
---    custaria 313 MB de dados mais 400 a 465 MB de indice de busca
---    textual, mais do que todo o orcamento utilizavel numa coluna so.
---    Fica na camada Parquet.
+-- 2. O texto livre do objeto do contrato NAO entra aqui. No ano inteiro
+--    ele soma 334,6 MB de dados, e um indice de busca textual custaria
+--    algo entre 430 e 500 MB (estimativa pela razao medida em janeiro):
+--    mais do que todo o orcamento utilizavel numa coluna so. Fica na
+--    camada Parquet.
 
 
 -- =====================================================================
@@ -114,8 +117,10 @@ CREATE TABLE IF NOT EXISTS dim_socio (
 
 COMMENT ON COLUMN dim_socio.genero IS
   'RN-04: classificado quando a proporcao dominante do primeiro nome na base '
-  'do IBGE alcanca 90%. A categoria indeterminado nao e falha, e a medida '
-  'explicita do que o metodo nao decide. Piloto mediu 5,7%.';
+  'de nomes do Censo 2022 (API v3 do IBGE) alcanca 90%. A categoria '
+  'indeterminado nao e falha, e a medida explicita do que o metodo nao '
+  'decide: 4,0% dos 327.180 socios PF do recorte nacional. O piloto de 5,7% '
+  'usou o Censo 2010 e outra populacao.';
 
 CREATE TABLE IF NOT EXISTS dim_tipo_contrato (
     id_tipo_contrato   INTEGER PRIMARY KEY,   -- o proprio id do PNCP
@@ -142,9 +147,9 @@ CREATE TABLE IF NOT EXISTS ponte_empresa_socio (
     data_entrada       DATE,
     qualificacao       TEXT NOT NULL,      -- codigo da tabela de dominio da Receita
     -- Agrupamento derivado da qualificacao, porque filtrar por codigo solto
-    -- e o erro classico: so o codigo 22 (Socio) perderia MEI, empresario
-    -- individual e sociedade unipessoal, onde o dono aparece como 50 ou 65
-    -- -- que e a maior parte dos fornecedores pequenos do setor publico.
+    -- e o erro classico: so o codigo 22 (Socio) perderia o titular que
+    -- aparece como 65, como o de EIRELI. Empresario individual e MEI nem
+    -- aparecem no arquivo de socios (RN-03 e RN-05).
     grupo_qualificacao TEXT
         CHECK (grupo_qualificacao IN ('participacao', 'titularidade',
                                       'administracao', 'representacao', 'outro')),
@@ -177,7 +182,10 @@ CREATE TABLE IF NOT EXISTS fato_contrato (
     id_tempo_assinatura  INTEGER REFERENCES dim_tempo(id_tempo),
     id_orgao           INTEGER NOT NULL REFERENCES dim_orgao(id_orgao),
     id_unidade         INTEGER REFERENCES dim_unidade(id_unidade),
-    id_fornecedor      INTEGER NOT NULL REFERENCES dim_fornecedor(id_fornecedor),
+    -- Nulo quando o fornecedor nao tem raiz de CNPJ (PF, estrangeiro ou
+    -- identificador irregular). O contrato continua no universo, e as
+    -- visoes dos KPIs o deixam de fora pela propria juncao (RN-01).
+    id_fornecedor      INTEGER REFERENCES dim_fornecedor(id_fornecedor),
     id_tipo_contrato   INTEGER REFERENCES dim_tipo_contrato(id_tipo_contrato),
     id_categoria       INTEGER REFERENCES dim_categoria_processo(id_categoria),
     prazo_dias         INTEGER,
@@ -197,9 +205,10 @@ CREATE TABLE IF NOT EXISTS fato_contrato (
 );
 
 COMMENT ON COLUMN fato_contrato.id_tempo_publicacao IS
-  'A coleta e por data de PUBLICACAO. Medido: 62,65% dos contratos '
-  'publicados em 2025 tem anoContrato 2024. Declarar qual das duas datas '
-  'orienta cada analise e obrigatorio.';
+  'A coleta e por data de PUBLICACAO. Medido no ano inteiro: 7,05% dos '
+  'contratos publicados em 2025 tem anoContrato 2024 (os 62,65% citados '
+  'antes eram so de 1 a 20 de janeiro). Declarar qual das duas datas '
+  'orienta cada analise continua obrigatorio.';
 
 
 -- =====================================================================
@@ -230,6 +239,12 @@ CREATE INDEX IF NOT EXISTS ix_socio_genero    ON dim_socio (genero);
 -- com ordenacao e juncao grande gera arquivo temporario em disco, que
 -- consome a MESMA cota de 1 GB -- ou seja, o painel lento tambem enche o
 -- disco. Materializar resolve os dois problemas.
+--
+-- Pendente para a carga da Fase 2, e declarado na RN-02 e na RN-05: esta
+-- visao do KPI ainda nao tira os contratos de receita (receita = true), nao
+-- aplica a regra do socio pessoa juridica e poe as empresas sem socio na
+-- base junto com as mistas. Os numeros de genero publicados ate agora vem
+-- do classificar_empresas.py, nao daqui.
 
 CREATE MATERIALIZED VIEW IF NOT EXISTS mv_kpi_genero_setor AS
 SELECT
