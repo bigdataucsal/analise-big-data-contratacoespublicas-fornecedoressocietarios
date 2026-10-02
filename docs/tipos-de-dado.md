@@ -1,6 +1,6 @@
 # Classificação dos tipos de dado
 
-Entrega da 1ª Unidade. Referência: 01/10/2026. Os trechos abaixo são reais: foram extraídos dos arquivos do projeto por `etl/exemplos_tipos.py` e estão em `docs/evidencias/exemplos_tipos.txt`. Os números vêm de `docs/5-vs.md`.
+Entrega da 1ª Unidade. Referência: 02/10/2026. Os trechos abaixo são reais: foram extraídos dos arquivos do projeto por `etl/exemplos_tipos.py` e estão em `docs/evidencias/exemplos_tipos.txt`. Os números vêm de `docs/5-vs.md`.
 
 O projeto reúne as três variedades sem forçar nenhuma delas, e cada uma exige um tratamento diferente.
 
@@ -30,9 +30,9 @@ Colunas, na ordem do dicionário da Receita: `cnpj_basico; identificador_de_soci
 - O separador é `;`, os campos vêm entre aspas, a codificação é latina e a data vem como `AAAAMMDD`, sem hífen.
 - O CPF vem mascarado (`***XXXXXX**`, aqui com os dígitos trocados por `X` por nossa causa). A máscara colide: em 200 mil linhas de `Socios1.zip` (amostra, não aleatória), há 169.762 pessoas físicas distintas por máscara contra 195.748 por máscara mais nome. Por isso a chave do sócio é nome mais máscara, nunca a máscara sozinha.
 - Quando não há representante legal, as colunas do representante vêm com valor de preenchimento (`***000000**` e qualificação `00`), e não vazias. Os campos `pais` e `nome_representante` são 99,71% e 98,19% nulos na mesma amostra.
-- Os códigos de qualificação (`22`, `49`), o identificador de sócio (`2`) e a faixa etária (`6`, `9`, `7`) só fazem sentido com a tabela de domínio. `[CONFIRMAR: preencher as descrições a partir de qualscsv.parquet e do PDF de metadados]`.
+- Os códigos só fazem sentido com a tabela de domínio. A qualificação `22` é Sócio e a `49` é Sócio-Administrador (tabela `qualscsv.parquet`). O identificador de sócio é 1 para pessoa jurídica, 2 para pessoa física e 3 para estrangeiro, e o `2` dos três exemplos marca pessoa física. A faixa etária usa 1 (0 a 12 anos), 2 (13 a 20), 3 (21 a 30), 4 (31 a 40), 5 (41 a 50), 6 (51 a 60), 7 (61 a 70), 8 (71 a 80), 9 (maiores de 80) e 0 (não se aplica, caso típico do sócio pessoa jurídica); nos exemplos, `6`, `9` e `7` são 51 a 60 anos, maiores de 80 e 61 a 70 anos. Fonte: PDF de metadados da Receita, via `docs/mapa-colunas-receita.md`, e a tabela de qualificações do próprio projeto.
 
-**Tratamento.** O arquivo é lido sem extrair o ZIP, com nomes de coluna explícitos, todos os campos como texto (o CNPJ e o CPF nunca viram número) e em blocos. O filtro mantém só as raízes de CNPJ que aparecem em contratos: das 28.341.092 linhas de sócios, ficam 339.385. A chave de junção com a empresa é a **raiz de 8 dígitos**, nunca o CNPJ de 14.
+**Tratamento.** O arquivo é lido sem extrair o ZIP, com nomes de coluna explícitos, todos os campos como texto (o CNPJ e o CPF nunca viram número) e em blocos. O filtro mantém só as raízes de CNPJ que aparecem em contratos: das 28.341.092 linhas de sócios, ficam 339.385. A chave de junção com a empresa é a **raiz de 8 dígitos**, nunca o CNPJ de 14. O detalhe do parser e a evidência de leitura completa estão em `docs/parser-receita.md`.
 
 ## 2. Semiestruturado: o contrato do PNCP
 
@@ -105,11 +105,13 @@ Um contrato real da coleta, com campos aninhados e vários campos opcionais vazi
 **Por que é semiestruturado.** Há estrutura, mas ela não é plana nem rígida:
 
 - **Aninhamento.** Quatro campos são objetos: `orgaoEntidade`, `tipoContrato`, `categoriaProcesso` e `unidadeOrgao`. Os dois do meio seguem o padrão código mais descrição, o que os torna candidatos naturais a tabelas de dimensão.
-- **Campos opcionais.** O registro tem 41 campos de topo, e muitos vêm `null` (`numeroControlePncpAta`, `codigoPaisFornecedor`, dados de subcontratada, `valorAcumulado`). Outros nem sempre existem: `orgaoSubRogado` e `unidadeSubRogada` aparecem em 0,31% dos contratos do ano. Cada registro traz o que tem.
+- **Campos opcionais.** O registro tem 41 campos de topo, e muitos vêm `null` (`numeroControlePncpAta`, `codigoPaisFornecedor`, dados de subcontratada, `valorAcumulado`). Outros quase nunca têm valor: `orgaoSubRogado` e `unidadeSubRogada` vêm preenchidos em apenas 0,31% dos contratos do ano (no registro acima, as duas chaves existem, mas com valor `null`). Cada registro traz o que tem.
 - **Convenções mistas.** Datas ora são só data (`2024-12-31`), ora data e hora sem fuso (`2025-01-01T00:30:03`). Valores monetários são números de ponto flutuante (`7000.0`). A caixa das chaves não é uniforme: `numeroControlePncpAta`, `numeroControlePncpCompra` e `numeroControlePNCP` (esta última é a chave de deduplicação).
 - **O nome do campo no dado real difere do roteiro.** O tipo de pessoa do fornecedor vem como `tipoPessoa` (PJ, PF ou PE), não `tipoPessoaFornecedor`.
 
 O registro também ilustra a decisão de data de referência: é um contrato com `anoContrato` 2024, assinado em 31/12/2024 e publicado em 01/01/2025. Como a consulta é por data de publicação, ele entra no recorte de 2025 (no ano inteiro, 7,05% dos contratos publicados têm `anoContrato` 2024).
+
+O registro ilustra ainda o campo `receita`, que aqui vale `true`. Segundo o manual de integração do PNCP, o campo distingue contrato de receita (verdadeiro) de contrato de despesa (falso), e o objeto do contrato confirma a leitura: o órgão vende mercadorias apreendidas e o fornecedor paga. No recorte (valor maior que zero, até R$ 1 bilhão), 20.439 contratos (1,0%) têm `receita` verdadeira e somam R$ 12,2 bilhões (1,6% do valor); os outros 1.984.629 são de despesa e somam R$ 759,0 bilhões. Contratos de receita não são recurso público recebido por fornecedores, e os indicadores de valor devem separá-los (decisão D9 em `docs/decisoes-do-grupo.md`).
 
 **Tratamento.** O bruto é guardado como veio, em NDJSON (3,62 GB). O tratamento achata os objetos aninhados em colunas, padroniza os nomes para `snake_case`, converte valores para decimal de duas casas, mantém CNPJ como texto e deduplica pela chave `numeroControlePNCP` (nenhuma duplicata nos 2.023.134 contratos). O resultado é um Parquet de 50 colunas e 254,1 MB, e é dele que saem as dimensões do modelo estrela.
 
@@ -131,7 +133,7 @@ Três exemplos reais do campo `objetoContrato`:
 
 Em números, no ano inteiro: média de 160 caracteres, máximo de 5.120, e 1,11% dos objetos com menos de 15 caracteres. O campo soma 334,6 MB.
 
-**Tratamento.** Para busca e contagem de termos, o texto é normalizado (minúsculas, sem acento, sem espaços duplos), a mesma regra aplicada aos nomes de sócios. Ele não vai para o PostgreSQL: o campo e um índice de busca textual passariam, juntos, de todo o orçamento utilizável do banco gratuito (ver `docs/escolha-do-banco.md`). Permanece no Parquet e, se houver tempo na Fase 2, é indexado em um motor de busca. No painel, o texto aparece no último nível do drill-down, do setor ao órgão ao contrato individual.
+**Tratamento.** Para busca e contagem de termos, o texto será normalizado (minúsculas, sem acento, sem espaços duplos), com a mesma regra aplicada aos nomes de sócios. Ele não vai para o PostgreSQL: o campo e um índice de busca textual passariam, juntos, de todo o orçamento utilizável do banco gratuito (ver `docs/escolha-do-banco.md`). Permanece no Parquet e, se houver tempo na Fase 2, é indexado em um motor de busca. No painel, o texto aparecerá no último nível do drill-down, do setor ao órgão ao contrato individual.
 
 ## Como os tipos se conectam no pipeline
 
@@ -139,7 +141,7 @@ Em números, no ano inteiro: média de 160 caracteres, máximo de 5.120, e 1,11%
 | --- | --- | --- |
 | JSON do PNCP (semiestruturado) | Parquet com colunas (estruturado) | Achatamento e tipagem |
 | CSV da Receita (estruturado) | Parquet filtrado (estruturado) | Leitura em blocos e filtro por raiz de CNPJ |
-| `objetoContrato` (não estruturado) | Texto normalizado no Parquet | Normalização; busca textual condicional |
+| `objetoContrato` (não estruturado) | Texto mantido no Parquet | Normalização e busca textual condicionais (Fase 2) |
 
 ## Cuidado com dados pessoais nos trechos
 
