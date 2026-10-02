@@ -89,8 +89,7 @@ milhões de linhas lidas (70.085.592 de empresas, 73.366.147 de
 estabelecimentos, 50.396.768 do Simples e 28.341.092 de sócios), o filtro
 manteve 1,31 milhão, 0,59%: 239.600 empresas (cinco das 239.605 raízes não
 constam do cadastro), 529.225 estabelecimentos, 201.427 registros do Simples e
-339.385 sócios. O tamanho em disco é `[PENDENTE: medir a pasta
-dados/parquet/receita]`. No recorte inicial, de 50 órgãos, eram 3.478 raízes e
+339.385 sócios. O tamanho em disco é 69,05 MB em Parquet (estabelecimentos 49,4 MB, sócios 10,4 MB, empresas 7,2 MB, Simples 1,9 MB e municípios 0,1 MB; as demais tabelas de domínio são desprezíveis), cerca de 400 vezes menos que os 28,67 GB descompactados de origem. É o tamanho comprimido em Parquet, não o do PostgreSQL, que será medido na carga.. No recorte inicial, de 50 órgãos, eram 3.478 raízes e
 3,89 MB.
 
 ## Velocidade
