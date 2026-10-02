@@ -16,6 +16,7 @@ env/
 *.zip
 .DS_Store
 Thumbs.db
+etl/dados/benchmark/
 
 .env
 terraform.tfvars
