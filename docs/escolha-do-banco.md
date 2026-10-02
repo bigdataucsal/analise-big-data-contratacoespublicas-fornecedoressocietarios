@@ -1,6 +1,6 @@
 # Escolha do banco: relacional versus não relacional
 
-Entrega da Trilha 3, semana 3, atualizada em 01/10/2026 com a coleta completa de 2025. Justifica a escolha do modelo de armazenamento com o modelo de dados e com os tempos medidos, e delimita onde o não relacional entra. Os itens marcados `[PENDENTE]` dependem de medição ainda não feita e não devem ser preenchidos sem ela. As decisões do grupo estão em `docs/decisoes-do-grupo.md`.
+Entrega da Trilha 3, semana 3, atualizada em 02/10/2026 com a coleta completa de 2025 e as medições no PostgreSQL da Aiven. Justifica a escolha do modelo de armazenamento com o modelo de dados e com os tempos medidos, e delimita onde o não relacional entra. Os itens marcados `[PENDENTE]` dependem de medição ainda não feita e não devem ser preenchidos sem ela. As decisões do grupo estão em `docs/decisoes-do-grupo.md`.
 
 ## A pergunta, colocada corretamente
 
@@ -37,15 +37,15 @@ O modelo completo está em `etl/schema_estrela.sql`, com dez tabelas, duas visõ
 
 ## A evidência de desempenho
 
-Rodamos a mesma consulta em duas abordagens, cinco execuções cada, reportando a mediana.
+Rodamos a mesma consulta em três abordagens: arquivos CSV lidos com pandas, um motor analítico colunar (DuckDB) sobre Parquet e o PostgreSQL do plano gratuito da Aiven. Nas duas abordagens locais foram cinco execuções cada, reportando a mediana; a medição no PostgreSQL está na seção seguinte.
 
 Antes dos números, é preciso ser exato sobre o que foi medido, porque a consulta executada não é o KPI interseccional propriamente dito e seria desonesto chamá-la assim. Ela tem a mesma forma de carga, que é o que importa para comparar motores: três junções entre fato, fornecedor e município, agrupamento por faixa de composição racial do território e por faixa de valor, com soma, contagem e mediana.
 
-Duas diferenças em relação ao KPI de verdade. Primeiro, a dimensão de fornecedor é montada a partir do próprio Parquet de contratos, e não da Receita, e o município usado é o do órgão comprador, que é o que o PNCP fornece, e não o da sede do fornecedor, que é o que a RN-06 exige. Segundo, a consulta agrupa por tipo de pessoa em vez de por gênero do controle, porque o gênero depende da tabela ponte, que não entra nesta medição. A Receita filtrada já existe (339.385 sócios), de modo que a consulta real, com a ponte, substitui esta na Fase 2.
+Duas diferenças em relação ao KPI de verdade. Primeiro, a dimensão de fornecedor é montada a partir do próprio Parquet de contratos, e não da Receita, e o município usado é o do órgão comprador, que é o que o PNCP fornece, e não o da sede do fornecedor, que é o que a RN-06 exige. A dimensão tem 243.297 raízes de CNPJ, contra as 239.605 do recorte `[PENDENTE: confirmar a explicação; a hipótese é que a dimensão inclui fornecedores cujos contratos todos ficam fora do filtro de valor, aplicado só à fato]`. Segundo, a consulta agrupa por tipo de pessoa em vez de por gênero do controle, porque o gênero depende da tabela ponte, que não entra nesta medição. A Receita filtrada já existe (339.385 sócios), de modo que a consulta real, com a ponte, substitui esta na Fase 2.
 
 Ou seja, a junção com a tabela ponte, que é justamente a parte que o argumento da modelagem existe para defender, ainda não está nesta medição. O que o teste mede é o custo de um padrão de junção e agregação equivalente, usado como proxy de carga.
 
-As duas abordagens comparadas foram arquivos CSV lidos com pandas, que representam não usar banco, e um motor analítico colunar (DuckDB) lendo Parquet. `[PENDENTE: registrar a versão do DuckDB e do pandas, o número de núcleos e a memória da máquina]`
+As duas abordagens locais foram arquivos CSV lidos com pandas, que representam não usar banco, e o motor colunar lendo Parquet. Versões e máquina: DuckDB 1.5.5, pandas 3.0.6 e 12 processadores lógicos. `[PENDENTE: registrar a memória RAM da máquina]`
 
 | abordagem | mediana | mínimo | máximo |
 | --- | --- | --- | --- |
@@ -66,28 +66,39 @@ O tamanho dos arquivos aponta na mesma direção. As tabelas desta medição ocu
 
 Sobre a coleta inteira, os 2.023.134 contratos passam de 3,62 GB em JSONL bruto para 254,1 MB em Parquet, cerca de catorze vezes menos.
 
-Sobre a contagem de contratos: o recorte de CNPJs tem 2.005.313 contratos e a tabela de fatos desta medição, 2.005.068. A diferença, 245, é a mesma que separa as contagens de contratos com valor zero (17.823 no Parquet e 17.578 no recorte). A explicação mais provável é que o tratamento arredonda o valor para duas casas, e contratos de valor ínfimo, como R$ 0,0001, viram zero e deixam de passar no critério de valor maior que zero. O arredondamento é correto: um contrato desse valor não representa transferência de recurso. `[PENDENTE: confirmar contando, no dado bruto, os contratos com valor entre 0 e 0,005; o esperado é 245]`
+Sobre a contagem de contratos: o recorte de CNPJs tem 2.005.313 contratos e a tabela de fatos desta medição, 2.005.068. A diferença, 245, é a mesma que separa as contagens de contratos de valor zero ou negativo (17.823 no Parquet e 17.578 no recorte): a fato da medição exclui todos os 17.823, e o recorte exclui 245 a menos. A explicação não está confirmada. Se os dois scripts leem o mesmo Parquet, o arredondamento do valor no tratamento não explica a diferença, porque afetaria os dois do mesmo modo; as hipóteses a verificar são o filtro de valor do `recorte_cnpjs.py` (por exemplo, tratar só valor igual a zero, e deixar passar valores negativos) e o tratamento de nulos. `[PENDENTE: contar, no Parquet, os contratos com valor igual a zero, menor que zero e nulo, e conferir o filtro do recorte; se o recorte aceita valor negativo, a RN-02 está descumprida por 245 contratos e isso deve ser declarado]`
 
 O teste pode ser reproduzido com `python benchmark_banco.py`.
 
-### O número que falta: o PostgreSQL
+### A medição no PostgreSQL
 
-Este documento ainda não traz o tempo do PostgreSQL. A comparação entre arquivos e PostgreSQL é entrega da Trilha 2, e o script que a faz está pronto: `python benchmark_postgres.py`, que reaproveita os arquivos da medição acima, carrega num schema isolado do serviço de teste da Aiven, roda a mesma consulta com e sem índices e mede, além do tempo, o tamanho real das tabelas, o tempo de execução no servidor e os arquivos temporários gerados.
+O script `etl/benchmark_postgres.py` reaproveita os arquivos da medição acima, carrega a fato e as duas dimensões num schema isolado do serviço da Aiven (plano gratuito, PostgreSQL 18.6, 1 CPU, 1 GB de memória e 1 GB de disco), roda a mesma consulta com e sem índices de junção e mede, além do tempo, o tamanho real das tabelas, o tempo de execução no servidor (EXPLAIN ANALYZE) e os arquivos temporários. Esta rodada mede também a latência de rede entre a máquina local e a nuvem da Aiven, e por isso o tempo no servidor é reportado à parte. A fato desta medição tem só cinco colunas. Foram feitas três rodadas em 02/10/2026, com 200 mil, 1 milhão e todas as 2.005.068 linhas da fato:
 
-| medição | valor |
-| --- | --- |
-| Primeira execução, sem índices | `[PENDENTE]` |
-| Mediana, sem índices | `[PENDENTE]` |
-| Mediana, com índices | `[PENDENTE]` |
-| Tempo de execução no servidor (EXPLAIN ANALYZE) | `[PENDENTE]` |
-| Arquivos temporários gerados | `[PENDENTE]` |
-| Tamanho real de fato, dimensões e índices | `[PENDENTE]` |
+| medição | 200 mil linhas | 1 milhão de linhas | 2.005.068 linhas |
+| --- | --- | --- | --- |
+| Carga da fato | 3,8 s | 97,9 s | 27,8 s |
+| Sem índices: mediana no cliente (mín. a máx.) | 2,315 s (1,545 a 2,865) | 15,259 s (11,873 a 16,548) | a conexão caiu |
+| Sem índices: tempo no servidor | 1,537 s | 14,292 s | n/d |
+| Criação dos índices | 5,2 s | 32,3 s | não chegou a esta etapa |
+| Com índices: mediana no cliente (mín. a máx.) | 1,624 s (1,422 a 2,440) | 9,204 s (6,764 a 12,441) | n/d |
+| Com índices: tempo no servidor | 1,593 s | 6,010 s | n/d |
+| Arquivos temporários (estatística acumulada do banco) | 190,6 MB | 1.164,1 MB | n/d |
+| Fato, com índices | 23,1 MB | 111,3 MB | 177 MB sem índices (medido) |
+| dim_fornecedor | 27,3 MB com índices | 27,3 MB com índices | 19 MB sem índices |
+| dim_municipio | 0,8 MB com índices | 0,8 MB com índices | 0,6 MB sem índices |
 
-Esta rodada mede a latência de rede até a nuvem da Aiven, além do trabalho do banco, e por isso o tempo no servidor é reportado à parte.
+Na rodada com a fato completa a carga terminou, mas a primeira consulta, sem índices, encerrou com `SSL connection has been closed unexpectedly`: o servidor derrubou a conexão. A causa não foi confirmada, porque não tivemos acesso aos logs do serviço. O console mostrava, numa janela de 60 minutos, memória em 80%, armazenamento em 62,8% e picos de CPU perto de 100% (`docs/evidencias/aiven_uso_do_no.png`), o que é compatível com falta de memória, mas não a prova. O script não conseguiu apagar o schema, que foi removido à mão (o banco voltou de 204 MB para 7,8 MB), e as tabelas foram medidas antes disso, ainda sem índices. O armazenamento de 62,8% não é comparável com os 204 MB do banco, porque o disco do serviço conta também o log de transações, os arquivos temporários e o sistema. O tempo de carga também variou entre as rodadas (97,9 s para 1 milhão de linhas contra 27,8 s para 2 milhões), e essa variação não foi investigada.
 
-Vale registrar que o argumento central deste documento não depende desse número. A escolha entre relacional e não relacional se decide pela forma do dado e pela cardinalidade das relações, e cronômetro é evidência de apoio, não o fundamento. Um nó de 1 CPU e 1 GB de memória pode levar mais tempo que o motor colunar local nesta consulta, e se isso acontecer será dito aqui. A razão de o PostgreSQL ser a camada de serviço não é a velocidade de uma consulta isolada, e sim a concorrência, os índices, a integridade referencial e o atendimento a vários usuários ao mesmo tempo.
+O que as medições mostram:
 
-**Conclusão da comparação:** `[PENDENTE: escrever depois da tabela]`
+- **O volume cabe no orçamento.** A fato de cinco colunas com todos os contratos ocupa 177 MB sem índices. Com índices, a estimativa vai de 213 MB (os índices somaram 20,2% dos dados com 1 milhão de linhas) a 223 MB (projeção linear dessa mesma rodada); a projeção do ensaio de 200 mil linhas foi de 231,5 MB. Somando as duas dimensões, as três tabelas ficam entre 241 e 251 MB, dentro do orçamento utilizável de 500 a 700 MB. A fato reduzida final terá mais colunas, e seu tamanho será medido na carga da Fase 2.
+- **O custo da consulta cresce mais que o volume.** Com 5 vezes mais linhas, o tempo no servidor foi 9,3 vezes maior sem índices (1,537 s para 14,292 s) e 3,8 vezes maior com índices (1,593 s para 6,010 s), e os arquivos temporários cresceram 6,1 vezes.
+- **Os índices só mostraram efeito na escala maior.** Com 200 mil linhas o tempo no servidor ficou igual (1,537 s e 1,593 s); com 1 milhão caiu de 14,292 s para 6,010 s, 2,4 vezes. O efeito sobre consultas seletivas, como as do drill-down, não foi medido.
+- **A consulta sobre a fato inteira não é viável no nó gratuito.** Com metade da fato, ela levou 6,0 s no servidor com índices; com a fato completa, o servidor derrubou a conexão.
+
+**Conclusão da comparação.** Nesta consulta, que agrega a fato inteira sem filtro, o PostgreSQL do nó gratuito não é a abordagem mais rápida. O motor colunar percorreu as 2.005.068 linhas em 0,234 s e o pandas em 5,9 s, enquanto o PostgreSQL levou 6,0 s no servidor com a metade das linhas e não terminou com a fato completa. Os tempos vêm de máquinas e volumes diferentes e não são comparáveis linha a linha, mas a ordem de grandeza basta para a decisão do projeto: o painel não consulta a fato a cada interação, e sim agregados calculados previamente. A razão de o PostgreSQL ser a camada de serviço não é a velocidade de uma consulta isolada, e sim a concorrência, os índices, a integridade referencial e o atendimento a vários usuários ao mesmo tempo, que este teste não mede. O argumento central deste documento, a forma relacional do dado, não depende do cronômetro: o tempo medido apoia a decisão de materializar agregados, e não a de preferir o banco por velocidade.
+
+A rodada completa (`--linhas 0`) não deve ser repetida no nó gratuito. O ensaio de 200 mil linhas e a rodada de 1 milhão podem ser reproduzidos com `python benchmark_postgres.py --linhas 200000` e `--linhas 1000000`, com o serviço ligado. As evidências estão em `docs/evidencias/` (`benchmark_postgres_ensaio_200k.txt`, `benchmark_postgres_1M.txt`, `benchmark_postgres_falha_2M.txt` e `aiven_uso_do_no.png`).
 
 ## Onde o não relacional entra
 
@@ -117,7 +128,7 @@ O plano impõe ainda outros limites, que moldam o painel:
 
 | Limite | Efeito | Resposta do projeto |
 | --- | --- | --- |
-| 1 CPU e 1 GB de memória | Consulta analítica pesada a cada clique não é sustentável | Visões materializadas e cache no painel |
+| 1 CPU e 1 GB de memória | Consulta analítica pesada a cada clique não é sustentável; medido: a agregação sobre a fato completa derrubou a conexão | Visões materializadas e cache no painel |
 | No máximo 20 conexões, sem pool | O painel pode esgotar as conexões | Uma conexão reutilizada e cache das consultas |
 | Desligamento por falta de atividade, com aviso | O painel pode aparecer vazio | Ligar e testar na véspera e uma hora antes; capturas de tela como plano B |
 | Um serviço PostgreSQL gratuito por organização | Impede um segundo serviço | Um único serviço oficial, provisionado por Terraform |
@@ -126,7 +137,7 @@ Fonte: documentação da Aiven, "Aiven for PostgreSQL free tier" (https://aiven.
 
 O plano gratuito foi mantido por decisão do grupo, conforme a recomendação da professora, e não por falta de alternativa: é o requisito do trabalho.
 
-Duas estimativas anteriores de tamanho divergem entre si e serão substituídas por medição. Uma tabela única e desnormalizada com os contratos ocuparia, segundo estimativa anterior, cerca de 1,9 GB entre dados e índices, e a normalização em estrela derrubaria os dados de cerca de 1,2 GB para cerca de 560 MB. Já o documento dos 5 V's extrapola que a tabela de fatos nacional passaria de 1 GB. `[PENDENTE: medir; o benchmark_postgres.py grava o tamanho real da fato e projeta para o total]` O que as medições de hoje dizem é que uma fato de cinco colunas, a mesma desta comparação, tem 27,7 MB em Parquet, e que o tamanho no PostgreSQL será maior porque não há compressão equivalente e há índices.
+Duas estimativas anteriores de tamanho divergiam entre si: uma tabela única e desnormalizada com os contratos ocuparia cerca de 1,9 GB entre dados e índices, e a normalização em estrela derrubaria os dados de cerca de 1,2 GB para cerca de 560 MB; já o documento dos 5 V's extrapolava que a tabela de fatos nacional passaria de 1 GB. A medição do PostgreSQL substitui essas estimativas para a fato de cinco colunas: 177 MB sem índices, e de 213 a 223 MB com índices. As estimativas antigas descrevem tabelas com outro conjunto de colunas e não são comparáveis com esta medição. O tamanho da fato reduzida final, que terá mais colunas, será medido na carga da Fase 2.
 
 As decisões de modelagem que respondem ao orçamento são três.
 
@@ -140,7 +151,7 @@ Há ainda duas otimizações menores que vale registrar porque são gratuitas. A
 
 ## Agregados calculados previamente
 
-Um nó com 1 GB de memória não sustenta consulta analítica pesada a cada clique de filtro. Além da lentidão, consultas com ordenação e junção grande geram arquivos temporários em disco que consomem a mesma cota de 1 GB, de modo que um painel lento também enche o disco.
+Um nó com 1 GB de memória não sustenta consulta analítica pesada a cada clique de filtro, e a medição acima confirma: a agregação sobre a fato completa derrubou a conexão. Além da lentidão, consultas com ordenação e junção grande geram arquivos temporários em disco que consomem a mesma cota de 1 GB (1.164,1 MB de temporários acumulados na rodada de 1 milhão de linhas, segundo a estatística do banco), de modo que um painel lento também enche o disco.
 
 Por isso o schema traz duas visões materializadas, uma para o KPI interseccional e outra para a concentração societária, ambas com índice próprio. O painel consulta os agregados, não o fato.
 
@@ -156,14 +167,16 @@ O filtro de agregação mínima da RN-09, que impede exibir resultado baseado em
 
 Adotamos PostgreSQL, no plano gratuito da Aiven, com modelo estrela e tabela ponte, porque a análise é inteiramente feita de junções entre entidades de cardinalidade conhecida, e porque a relação muitos para muitos entre empresa e sócio exige uma tabela de ligação que um modelo de documentos resolveria pior.
 
-Mantemos o Parquet como camada analítica, medida como cerca de 25 vezes mais rápida que arquivos CSV na consulta representativa e cerca de catorze vezes menor que o bruto, e é nela que o tratamento acontece. O banco recebe só o recorte reduzido e modelado em estrela.
+Mantemos o Parquet como camada analítica, medida como cerca de 25 vezes mais rápida que arquivos CSV na consulta representativa e cerca de catorze vezes menor que o bruto, e é nela que o tratamento acontece. O banco recebe só o recorte reduzido e modelado em estrela. No nó gratuito, a mesma consulta sobre a fato completa não chegou a terminar (a conexão caiu) e, com 1 milhão de linhas, levou 6,0 s no servidor; por isso o painel lê agregados materializados, e a escolha do banco se apoia na forma do dado, não na velocidade.
 
 Reservamos o não relacional para o texto livre do objeto do contrato, que é onde há dado sem esquema fixo e onde a busca textual justifica um índice invertido, e cuja permanência no banco relacional, além disso, não caberia no orçamento de disco.
 
 ## Pendências deste documento
 
-- Medir o PostgreSQL com `benchmark_postgres.py` e preencher a tabela e a conclusão.
-- Registrar a versão do DuckDB e do pandas e a máquina usada.
-- Conferir que as duas abordagens da medição devolvem os mesmos totais, e não só o mesmo número de linhas.
-- Confirmar a explicação dos 245 contratos de diferença.
-- Substituir as estimativas de tamanho pela medição real da fato no banco.
+- Registrar a memória RAM da máquina (versões e núcleos já estão registrados).
+- Conferir que as duas abordagens locais devolvem os mesmos totais, e não só o mesmo número de linhas.
+- Confirmar a explicação dos 245 contratos de diferença e das 3.692 raízes a mais na dimensão de fornecedor.
+- Medir o tamanho da fato reduzida final na carga da Fase 2.
+- Medir no PostgreSQL uma consulta seletiva, como a do drill-down, onde o índice deve contar.
+- Se houver tempo, rodar o pandas com 200 mil e 1 milhão de linhas, os mesmos volumes do PostgreSQL.
+- Investigar a causa da queda da conexão com a fato completa, se o grupo tiver acesso aos logs do serviço.
