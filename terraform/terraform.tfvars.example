@@ -1,0 +1,4 @@
+# Copie para terraform.tfvars (que está no .gitignore) e preencha.
+# O token NÃO vai aqui. No PowerShell, na mesma janela em que rodar o terraform:
+#   $env:TF_VAR_aiven_api_token = "cole-o-token-aqui"
+project_name = "NOME_DO_PROJETO_NA_AIVEN"
