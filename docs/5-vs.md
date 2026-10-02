@@ -68,14 +68,20 @@ abandonado. A cobertura nacional é exigência do KPI de comparação entre
 estados, e a coleta completa cabe sem dificuldade na máquina de tratamento: os
 2.023.134 contratos foram tratados e gravados em Parquet em 30,2 segundos. O
 que substitui o recorte por órgão é o corte de sanidade sobre o valor (seção
-Veracidade) e o filtro do lado da Receita. A consequência é um risco que fica
-em aberto: extrapolando linearmente a estimativa de 135 MB, feita para 11% dos
-contratos, a tabela de fatos nacional passaria de 1 GB, acima do orçamento
-utilizável. É uma extrapolação, não uma medição `[PENDENTE: medir ou estimar o
-tamanho de fato_contrato sem o texto]`, mas indica que o banco não deve receber
-a fato completa. A decisão sobre o que carregar no Aiven (colunas reduzidas,
-fato agregada, ou um recorte aplicado só à carga, mantendo a coleta nacional no
-Parquet) fica para a Fase 2.
+Veracidade) e o filtro do lado da Receita. A consequência foi um risco que o
+benchmark no PostgreSQL permitiu medir. Extrapolando linearmente a estimativa
+de 135 MB, feita para 11% dos contratos, a tabela de fatos nacional passaria de
+1 GB, acima do orçamento utilizável. A medição mostrou outra ordem de grandeza:
+numa fato de 5 colunas, a carga completa (2.005.068 linhas) ocupou 177 MB sem
+índices, e a estimativa com índices fica entre 213 e 223 MB, conforme o método
+(índices em cerca de 20% dos dados, medido com 1 milhão de linhas, ou projeção
+linear dessa rodada). A fato reduzida final terá mais colunas, e seu tamanho
+será medido na carga da Fase 2. O limite apareceu em outro ponto: a consulta de
+agregação sobre a fato completa derrubou a conexão do nó gratuito (1 CPU, 1 GB
+de RAM), por causa não confirmada, e com 1 milhão de linhas a mesma consulta já
+levava 6,0 s no servidor, com índices (14,3 s sem índices). Por isso o banco
+recebe só a fato reduzida e o painel consulta agregados materializados
+(decisão D2), enquanto a coleta nacional permanece em Parquet.
 
 Para o lado da Receita, a redução vem de inverter a ordem do processamento.
 Como a base é publicada em arquivos compactados monolíticos, sem possibilidade
@@ -89,8 +95,12 @@ milhões de linhas lidas (70.085.592 de empresas, 73.366.147 de
 estabelecimentos, 50.396.768 do Simples e 28.341.092 de sócios), o filtro
 manteve 1,31 milhão, 0,59%: 239.600 empresas (cinco das 239.605 raízes não
 constam do cadastro), 529.225 estabelecimentos, 201.427 registros do Simples e
-339.385 sócios. O tamanho em disco é 69,05 MB em Parquet (estabelecimentos 49,4 MB, sócios 10,4 MB, empresas 7,2 MB, Simples 1,9 MB e municípios 0,1 MB; as demais tabelas de domínio são desprezíveis), cerca de 400 vezes menos que os 28,67 GB descompactados de origem. É o tamanho comprimido em Parquet, não o do PostgreSQL, que será medido na carga.. No recorte inicial, de 50 órgãos, eram 3.478 raízes e
-3,89 MB.
+339.385 sócios. O tamanho em disco é 69,05 MB em Parquet (estabelecimentos 49,4
+MB, sócios 10,4 MB, empresas 7,2 MB, Simples 1,9 MB e municípios 0,1 MB; as
+demais tabelas de domínio são desprezíveis), cerca de 400 vezes menos que os
+28,67 GB descompactados de origem. É o tamanho comprimido em Parquet, não o do
+PostgreSQL, que será medido na carga. No recorte inicial, de 50 órgãos, eram
+3.478 raízes e 3,89 MB.
 
 ## Velocidade
 
@@ -319,7 +329,9 @@ dessas são empresários individuais (26,2% do recorte), cujo titular não const
 do quadro societário. Os 327.180 sócios pessoa física elegíveis ficaram 34,3%
 como femininos, 61,8% como masculinos e 4,0% como indeterminados (112.164,
 202.077 e 12.939), depois de classificar 28.048 primeiros nomes distintos
-contra a API v3 do Censo 2022. A taxa de indeterminados por sócio foi de 3,7%
+contra a API v3 do Censo 2022 `[PENDENTE: conferir por que a coleta na API
+registrou 18.965 nomes em 107,7 minutos e a classificação usou 28.048; pode ser
+cache de rodadas anteriores]`. A taxa de indeterminados por sócio foi de 3,7%
 no piloto de mil sócios, 3,9% no recorte inicial e 4,0% no nacional; a primeira
 versão do método, sobre fornecedores pessoa física, tinha dado 5,7%. Pela regra
 RN-05, 131.423 empresas têm controle definido, 54,9% do recorte e 75,3% das que
@@ -349,12 +361,14 @@ cobertura da coleta contra a API; `tratar_contratos.py --resumo` dá os totais d
 tratamento; `recorte_cnpjs.py` aplica o corte de sanidade e gera a lista de
 CNPJs; `diagnostico_valores.py` e `auditar_extremos.py` tratam os valores
 extremos e a sensibilidade do corte; `perfil_veracidade.py` recalcula os
-percentuais de qualidade; `medir_pendencias.py` mede a Receita; e
-`classificar_empresas.py` infere o gênero do controle. As medições são de
-30/09/2026, sobre a coleta completa de 2025 e a competência 2026-09-14 da
-Receita. Os itens marcados `[PENDENTE]` dependem da medição do tamanho do filtro da
-Receita, do cruzamento do gênero com o valor dos contratos e da estimativa da
-fato. Os marcados `[AMOSTRA JAN]` são resultados de janeiro
-mantidos como histórico do método, com a comparação contra o ano inteiro na
-seção Veracidade: a coleta completa mostrou que a distribuição de janeiro não
-se repete ao longo do ano.
+percentuais de qualidade; `medir_pendencias.py` mede a Receita;
+`classificar_empresas.py` infere o gênero do controle; e `benchmark_postgres.py`
+mede o tamanho das tabelas no PostgreSQL (evidências em `docs/evidencias/`). As
+medições são de 30/09/2026, sobre a coleta completa de 2025 e a competência
+2026-09-14 da Receita, exceto o benchmark no PostgreSQL, de 02/10/2026. Os
+itens marcados `[PENDENTE]` dependem do cruzamento do gênero com o valor dos
+contratos (KPI 1), da reconciliação dos contratos de valor zero (17.823 contra
+17.578) e da conferência do número de nomes consultados na API do IBGE. Os
+marcados `[AMOSTRA JAN]` são resultados de janeiro mantidos como histórico do
+método, com a comparação contra o ano inteiro na seção Veracidade: a coleta
+completa mostrou que a distribuição de janeiro não se repete ao longo do ano.
