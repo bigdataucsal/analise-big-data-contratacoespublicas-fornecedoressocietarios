@@ -72,12 +72,3 @@ Todo o embasamento técnico e metodológico está consolidado na pasta `docs/`:
 
 A infraestrutura na Aiven é provisionada via Terraform. 
 * **Segurança:** Nenhuma credencial é exposta no repositório. Arquivos como `.env`, `.terraform.tfstate`, `terraform.tfvars` e a URI do banco de dados são estritamente proibidos no versionamento do projeto.
-
----
-
-## 7. Pendências e Próximos Passos
-
-- [ ] Incluir no repositório o log de execução do parser da Receita.
-- [ ] Documentar a contagem exata dos 245 contratos que foram identificados diretamente no JSON bruto.
-- [ ] **Fase 2 (KPI 1):** Implementar e validar o cálculo do Valor Total por Gênero.
-- [ ] **Regra D9:** Tratar e isolar os contratos classificados como "receita" (casos onde o fornecedor repassa valor ao órgão) para não inflacionar os indicadores de despesa do dashboard.
