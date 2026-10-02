@@ -1,6 +1,6 @@
 # Os 5 V's aplicados ao dataset
 
-Trilha 3. Referência: 30/09/2026. Os números deste documento foram medidos
+Trilha 3. Referência: 30/09/2026, revisado em 02/10/2026. Os números deste documento foram medidos
 contra os dados do projeto, não estimados. A base de medição é a coleta
 completa do PNCP para 2025: 2.023.134 contratos publicados de 1º de janeiro a
 31 de dezembro, com cobertura conferida contra o `totalRegistros` da própria
@@ -71,12 +71,14 @@ que substitui o recorte por órgão é o corte de sanidade sobre o valor (seçã
 Veracidade) e o filtro do lado da Receita. A consequência foi um risco que o
 benchmark no PostgreSQL permitiu medir. Extrapolando linearmente a estimativa
 de 135 MB, feita para 11% dos contratos, a tabela de fatos nacional passaria de
-1 GB, acima do orçamento utilizável. A medição mostrou outra ordem de grandeza:
-numa fato de 5 colunas, a carga completa (2.005.068 linhas) ocupou 177 MB sem
-índices, e a estimativa com índices fica entre 213 e 223 MB, conforme o método
-(índices em cerca de 20% dos dados, medido com 1 milhão de linhas, ou projeção
-linear dessa rodada). A fato reduzida final terá mais colunas, e seu tamanho
-será medido na carga da Fase 2. O limite apareceu em outro ponto: a consulta de
+1 GB, acima do orçamento utilizável. A medição no PostgreSQL não é diretamente
+comparável com essa extrapolação, que era de uma fato com mais colunas, mas
+mostra que o número de linhas, sozinho, não estoura o disco: numa fato de 5
+colunas, a carga completa (2.005.068 linhas) ocupou 177 MB sem índices, e a
+estimativa com índices fica entre 213 e 223 MB, conforme o método (índices em
+cerca de 20% dos dados, medido com 1 milhão de linhas, ou projeção linear dessa
+rodada). A fato reduzida final terá mais colunas, e seu tamanho só será
+conhecido na carga da Fase 2. O limite apareceu em outro ponto: a consulta de
 agregação sobre a fato completa derrubou a conexão do nó gratuito (1 CPU, 1 GB
 de RAM), por causa não confirmada, e com 1 milhão de linhas a mesma consulta já
 levava 6,0 s no servidor, com índices (14,3 s sem índices). Por isso o banco
@@ -170,12 +172,17 @@ sem linha de cabeçalho, separados por ponto e vírgula e em codificação latin
 São eles que trazem empresas, estabelecimentos e o quadro societário.
 
 O dado semiestruturado são as respostas JSON das APIs do PNCP, do Portal da
-Transparência e do IBGE. No caso do PNCP, a estrutura é aninhada: os campos
-`orgaoEntidade`, `unidadeOrgao`, `tipoContrato` e `categoriaProcesso` são
-objetos, e os dois últimos seguem o padrão de código mais descrição, o que os
-torna candidatos naturais a tabelas de dimensão. Há ainda campos que existem
-em alguns registros e não em outros, como `orgaoSubRogado` e
-`unidadeSubRogada`, presentes em 0,31% dos contratos do ano.
+Transparência e do IBGE. Cada contrato do PNCP tem 41 campos de topo, e a
+estrutura é aninhada: `orgaoEntidade`, `unidadeOrgao`, `tipoContrato` e
+`categoriaProcesso` são objetos, e os dois últimos seguem o padrão de código
+mais descrição, o que os torna candidatos naturais a tabelas de dimensão. Outros
+dois, `orgaoSubRogado` e `unidadeSubRogada`, também são objetos, mas só vêm
+preenchidos em 0,31% dos contratos do ano; nos demais a chave existe e vale
+nulo. Nos 58.769 contratos de janeiro que conferimos localmente, todos os
+registros trazem exatamente os mesmos 41 campos `[AMOSTRA JAN]`, e o exemplo do
+ano em `docs/evidencias/exemplos_tipos.txt` também. Os nomes nem sempre batem
+com o roteiro do projeto: o tipo do fornecedor vem no campo `tipoPessoa`, e não
+em `tipoPessoaFornecedor`, que não existe no dado.
 
 O dado não estruturado é o campo `objetoContrato`, texto livre em português,
 sem padronização, com média de 160 caracteres e máximo de 5.120 nos 2.023.134
@@ -208,7 +215,10 @@ dos 2.023.134 contratos é de R$ 18,25 trilhões. Desse total, 95,77% estão em
 total é de R$ 771,2 bilhões. Na amostra de janeiro, a mediana do valor global
 era de R$ 4.153,50 e a média de R$ 45.013.038,24, ou seja, a média era 10.837
 vezes a mediana, e 26 contratos concentravam 98,7% do valor somado
-`[AMOSTRA JAN]`. No ano inteiro, a mediana é de R$ 3.486,00 e a média de
+`[AMOSTRA JAN]`. Esses dois números de janeiro foram calculados com os contratos
+de valor zero; contando só valor maior que zero, como no ano, eram R$ 4.260,00 e
+R$ 45.333.160,44 (conferido nesta revisão), e a comparação a seguir deve usar
+esses. No ano inteiro, a mediana é de R$ 3.486,00 e a média de
 R$ 9.101.366,39, cerca de 2.611 vezes a mediana. Depois do corte de sanidade, a
 média cai para R$ 384.638,09 (110 vezes a mediana), enquanto a mediana quase
 não se move (R$ 3.484,00): é a mediana, e não a média, que descreve o contrato
@@ -262,10 +272,10 @@ um achado: a amostra de janeiro não representava o ano.
 | Valor inicial diferente do valor global | 2,09% | 2,13% |
 | Objeto com menos de 15 caracteres | 1,69% | 1,11% |
 | Data de assinatura anterior a 2024 | 0,78% | 0,23% |
-| Valor global zero | 0,70% | 0,88% (17.823, igual em `medir_pendencias.py`, `perfil_veracidade.py` e `diagnostico_valores.py`) (nenhum valor negativo ou nulo; os 17.578 do recorte_cnpjs.py vêm do JSON bruto, e a diferença de 245 é compatível com valores positivos ínfimos que o tratamento arredonda a zero) |
+| Valor global zero | 0,70% | 0,88% (17.823 em centavos, igual em `medir_pendencias.py`, `perfil_veracidade.py` e `diagnostico_valores.py`; nenhum negativo ou nulo). No JSON bruto, que o `recorte_cnpjs.py` lê, são 17.578: a diferença de 245 são valores positivos menores que meio centavo, que o tratamento arredonda para zero (ver abaixo) |
 | Assinatura posterior à publicação | 0,16% | 0,14% |
 | Nome do fornecedor vazio | 0,02% | 0,01% |
-| `receita` verdadeira (contrato de receita para o órgão) | não medido | 1,02% do recorte (20.439 de 2.005.068; R$ 12,2 bi) |
+| `receita` verdadeira (contrato de receita para o órgão) | 0,85% depois do corte (493 de 58.328), medido nesta revisão | 1,02% do recorte (20.439 de 2.005.068; R$ 12,2 bi). A marca erra nos dois sentidos; ver a RN-02 |
 
 Sobre o `anoContrato`: como a consulta da API é por data de publicação, a coleta
 de janeiro captura majoritariamente contratos assinados no ano anterior. Isso
@@ -276,6 +286,23 @@ começo do ano: no ano inteiro, apenas 7,05% dos contratos publicados em 2025
 têm `anoContrato` 2024 (92,69% têm 2025 e 0,25% têm outro valor ou nenhum), e o
 efeito da escolha entre as duas datas é pequeno.
 
+Sobre o valor zero, a conta dos dois números fecha assim. O tratamento lê
+`valorGlobal` como número de ponto flutuante e grava o valor com duas casas
+decimais, arredondando, de modo que todo valor positivo menor que meio centavo
+vira R$ 0,00 no Parquet. O `recorte_cnpjs.py` lê o JSON bruto e só exclui quem
+tem valor menor ou igual a zero, então deixa esses contratos passarem. Como o
+Parquet não tem valor negativo nem nulo, o bruto também não tem nulo (17.578 +
+243 + 2.005.313 = 2.023.134), e os dois lados têm os mesmos 243 contratos acima
+de um bilhão, a diferença entre 17.823 e 17.578 só pode vir de valores entre
+zero e meio centavo: são 245. É o mesmo efeito que separa os 2.005.313 contratos
+do recorte dos 2.005.068 da fato do benchmark. A conta é dedução, feita com os
+números publicados e a leitura do código; a contagem direta no JSON bruto do ano
+não foi refeita nesta revisão, porque a coleta completa está na máquina da T2.
+O mecanismo foi reproduzido nos 20 dias de janeiro que temos localmente: 410
+contratos com valor zero no bruto, 415 em centavos, e a diferença são 5
+contratos de R$ 0,0001 `[AMOSTRA JAN]`. A RN-02 passou a valer para o valor em
+centavos.
+
 Sobre os identificadores: no ano inteiro, o tipo de fornecedor é PJ em
 1.941.824 contratos (96,0%), PF em 74.433 (3,7%) e PE, estrangeiro, em 6.877
 (0,3%). Todos os identificadores com tamanho diferente de 11 e de 14
@@ -285,7 +312,10 @@ pessoa contradiz o tamanho do documento: 1.472 "PJ" com 11 dígitos e 507 "PF"
 com 14. Dois contratos não têm identificador de fornecedor. Não cruzam com a Receita,
 por não terem raiz de CNPJ, 1.474 contratos PJ, todos os 74.433 de PF e todos os
 6.877 de PE. Os fornecedores PF não têm quadro societário a ser cruzado e formam
-um universo separado.
+um universo separado. A RN-01 transformou isso em regra declarada: depois do
+filtro de valor, esse universo tem 78.795 contratos da fato (3,9%) e R$ 16,9
+bilhões (2,2% do valor depois do corte), que ficam fora dos indicadores de
+controle societário e são informados à parte.
 
 Sobre os sócios da Receita, nas 200 mil primeiras linhas de `Socios1.zip`
 (`[AMOSTRA]`, não aleatória): o campo `pais` é 99,71% nulo e
@@ -327,24 +357,41 @@ O quinto elo já tem medição sobre a população à qual a regra se aplica, os
 sócios da Receita Federal, agora no recorte nacional. Das 239.600 empresas do
 recorte, 174.599 têm linha de sócio na base e 65.001 não têm (27,1%); 62.880
 dessas são empresários individuais (26,2% do recorte), cujo titular não consta
-do quadro societário. Os 327.180 sócios pessoa física elegíveis ficaram 34,3%
-como femininos, 61,8% como masculinos e 4,0% como indeterminados (112.164,
-202.077 e 12.939), depois de classificar 28.048 primeiros nomes distintos
-contra a API v3 do Censo 2022 `[PENDENTE: conferir por que a coleta na API
-registrou 18.965 nomes em 107,7 minutos e a classificação usou 28.048; pode ser
-cache de rodadas anteriores]`. A taxa de indeterminados por sócio foi de 3,7%
-no piloto de mil sócios, 3,9% no recorte inicial e 4,0% no nacional; a primeira
-versão do método, sobre fornecedores pessoa física, tinha dado 5,7%. Pela regra
-RN-05, 131.423 empresas têm controle definido, 54,9% do recorte e 75,3% das que
-têm sócio na base: 39.904 femininas e 91.519 masculinas, ou seja, 30,4% de
-controle feminino entre as de controle definido, contra 30,3% no recorte
-inicial. As demais ficam como mistas ou indeterminadas: 26.817 sem maioria,
-8.282 com muitos sócios indeterminados e 8.076 com sócio pessoa jurídica. A
-fração de empresas com controle definido caiu de 64,8% para 54,9% porque os
-empresários individuais passaram de 8,8% para 26,2% do recorte. A taxa de
-indeterminados é o que torna a inferência auditável: ela não é falha do método,
-é a medida explícita do que o método não consegue decidir. Os 30,4% contam
-empresas, não valor `[PENDENTE: cruzar com o valor dos contratos, KPI 1]`.
+do quadro societário, e formam um universo declarado à parte, sem inferência
+pelo titular (decisão D5). Os 327.180 sócios pessoa física elegíveis ficaram
+34,3% como femininos, 61,8% como masculinos e 4,0% como indeterminados (112.164,
+202.077 e 12.939), depois de classificar 28.048 primeiros nomes distintos. A
+base de nomes é a do Censo Demográfico 2022,
+consultada pela API v3 do IBGE; o roteiro cita o Censo 2010, base da API v2, que
+só foi usada no piloto inicial (5,7% de indeterminados) e não em nenhum número
+atual. A rodada que gerou esses números não consultou a API: os 28.048 nomes já
+estavam no cache, que tinha 28.112 ("0 a consultar", em
+`docs/evidencias/classificacao_genero.txt`). A diferença para os 18.965 nomes
+consultados em 107,7 minutos, citados em Velocidade, é compatível com cache
+acumulado nas rodadas anteriores; a contagem por rodada não foi conferida, e
+nenhum número de gênero depende dela. A taxa de indeterminados por sócio foi de
+3,7% no piloto de mil sócios, 3,9% no recorte inicial e 4,0% no nacional; o
+piloto inicial, sobre fornecedores pessoa física, tinha dado 5,7%, e a
+diferença mistura a troca de população com a troca de base. Pela
+regra RN-05, 131.423 empresas têm controle definido, 54,9% do recorte e 75,3%
+das que têm sócio na base: 39.904 femininas e 91.519 masculinas, ou seja, 30,4%
+de controle feminino entre as de controle definido, contra 30,3% no recorte
+inicial. As outras 43.176 com sócio na base ficam sem controle definido: 26.817
+sem maioria, 8.282 com muitos sócios indeterminados, 8.076 com sócio pessoa
+jurídica e 1 que só tem sócio estrangeiro e por isso nenhum sócio elegível. Com
+essa última a soma fecha nas 174.599; sem ela, dava 174.598. A fração de
+empresas com controle definido caiu de 64,8% para 54,9% porque os empresários
+individuais passaram de 8,8% para 26,2% do recorte. A taxa de indeterminados é o
+que torna a inferência auditável: ela não é falha do método, é a medida
+explícita do que o método não consegue decidir.
+
+Duas ressalvas acompanham os 30,4%. A primeira é que eles contam empresas, não
+valor: o cruzamento com o valor dos contratos, que é o que o KPI 1 pede, fica
+para a Fase 2 `[PENDENTE]`. A segunda é que a contagem inclui as empresas que só
+aparecem em contratos de receita, que a RN-02 passou a tirar dos indicadores;
+quantas são no ano não foi medido `[PENDENTE]`. Na regra RN-03, a escolha de
+contar diretor, presidente e conselheiro como administradores (decisão D4) pesa
+7,8% das linhas de sócio, e a rodada sem eles fica para a Fase 2.
 
 Vale notar que a terceira pergunta é a que mais restringe o desenho técnico,
 porque análise de rede exige ver todos os contratos de cada sócio dentro do
@@ -359,8 +406,9 @@ concentração subestimar sistematicamente o fenômeno que se quer medir.
 Os números de Volume, Velocidade e Veracidade deste documento podem ser
 reproduzidos com os scripts do diretório `etl`: `verificar_pncp.py` confere a
 cobertura da coleta contra a API; `tratar_contratos.py --resumo` dá os totais do
-tratamento; `recorte_cnpjs.py` aplica o corte de sanidade e gera a lista de
-CNPJs; `diagnostico_valores.py` e `auditar_extremos.py` tratam os valores
+tratamento; `recorte_cnpjs.py --todos-orgaos` aplica o corte de sanidade e gera
+a lista de CNPJs (sem a opção, o script ainda faz o recorte antigo de 50
+órgãos); `diagnostico_valores.py` e `auditar_extremos.py` tratam os valores
 extremos e a sensibilidade do corte; `perfil_veracidade.py` recalcula os
 percentuais de qualidade; `medir_pendencias.py` mede a Receita;
 `classificar_empresas.py` infere o gênero do controle; e `benchmark_postgres.py`
@@ -368,8 +416,12 @@ mede o tamanho das tabelas no PostgreSQL (evidências em `docs/evidencias/`). As
 medições são de 30/09/2026, sobre a coleta completa de 2025 e a competência
 2026-09-14 da Receita, exceto o benchmark no PostgreSQL, de 02/10/2026. Os
 itens marcados `[PENDENTE]` dependem do cruzamento do gênero com o valor dos
-contratos (KPI 1), da confirmação, no JSON bruto, dos 245 contratos de valor ínfimo,
- e da conferência do número de nomes consultados na API do IBGE. Os
-marcados `[AMOSTRA JAN]` são resultados de janeiro mantidos como histórico do
-método, com a comparação contra o ano inteiro na seção Veracidade: a coleta
+contratos (KPI 1) e de duas medições sobre os contratos de receita: como a marca
+se distribui no ano inteiro e quantas empresas só aparecem em contratos de
+receita. A diferença de 245 contratos de valor zero está explicada em
+Veracidade e deixou de ser pendência. Os marcados `[AMOSTRA JAN]` são resultados
+de janeiro, mantidos como histórico do método ou medidos nesta revisão sobre a
+cópia local de 1 a 20 de janeiro (campos de topo, valores menores que meio
+centavo e contratos de receita), já que a coleta completa e a Receita estão na
+máquina da T2; a comparação contra o ano inteiro está em Veracidade, e a coleta
 completa mostrou que a distribuição de janeiro não se repete ao longo do ano.
