@@ -45,16 +45,22 @@ Duas diferenças em relação ao KPI de verdade. Primeiro, a dimensão de fornec
 
 Ou seja, a junção com a tabela ponte, que é justamente a parte que o argumento da modelagem existe para defender, ainda não está nesta medição. O que o teste mede é o custo de um padrão de junção e agregação equivalente, usado como proxy de carga.
 
-As duas abordagens locais foram arquivos CSV lidos com pandas, que representam não usar banco, e o motor colunar lendo Parquet. Versões e máquina: DuckDB 1.5.5, pandas 3.0.6 e 12 processadores lógicos. `[PENDENTE: registrar a memória RAM da máquina]`
+As duas abordagens locais foram arquivos CSV lidos com pandas, que representam não usar banco, e o motor colunar lendo Parquet. Versões e máquina: DuckDB 1.5.5, pandas 3.0.6, Python 3.12.10, Windows 11, 12 processadores lógicos e 7,67 GiB de memória RAM.
 
-| abordagem | mediana | mínimo | máximo |
+Para que a comparação use o mesmo conteúdo nas três abordagens, o script aceita `--linhas N`, que toma as primeiras N linhas do mesmo `fato.csv` que o `benchmark_postgres.py` carrega. O volume completo é de 2.005.068 contratos, os que passam no corte de sanidade e têm valor maior que zero depois do tratamento. Rodadas de 02/10/2026, com cinco execuções cada (medianas em segundos, com mínimo e máximo):
+
+| linhas na fato | pandas sobre CSV | DuckDB sobre Parquet | razão |
 | --- | --- | --- | --- |
-| arquivos CSV lidos com pandas | 5,906 s | 5,124 s | 13,479 s |
-| motor colunar (DuckDB) sobre Parquet | 0,234 s | 0,185 s | 0,427 s |
+| 200 mil | 0,588 (0,538 a 0,700) | 0,039 (0,038 a 0,086) | 14,9 vezes |
+| 1 milhão | 1,691 (1,603 a 2,007) | 0,078 (0,077 a 0,132) | 21,6 vezes |
+| 2.005.068 (rodada de 02/10) | 5,419 (3,120 a 8,461) | 0,112 (0,109 a 0,161) | 48,5 vezes |
+| 2.005.068 (rodada de 01/10) | 5,906 (5,124 a 13,479) | 0,234 (0,185 a 0,427) | 25 vezes |
 
-A medição foi feita sobre 2.005.068 contratos, os que passam no corte de sanidade e têm valor maior que zero depois do tratamento. As duas abordagens devolveram o mesmo número de linhas, doze. `[PENDENTE: comparar também a soma de contratos e de valor entre as duas, para confirmar que o resultado é o mesmo e não apenas do mesmo tamanho]`
+Além do tempo, o script compara o resultado das duas abordagens, grupo a grupo. Nos três volumes os resultados são idênticos: 12 grupos, com contagem de contratos exata e soma e mediana do valor iguais até R$ 0,01. No volume completo, o resultado reúne 1.926.273 contratos e R$ 754,3 bilhões (evidências em `docs/evidencias/benchmark_banco_200000.txt`, `benchmark_banco_1000000.txt` e `benchmark_banco_completo.txt`).
 
-O motor colunar foi cerca de 25 vezes mais rápido. É preciso registrar duas ressalvas sobre esse número. A primeira é a variação entre rodadas: uma rodada anterior, feita antes de alinhar as faixas de valor entre as duas consultas, deu 35 vezes (5,710 s contra 0,163 s), e o máximo do pandas (13,5 s) é mais de duas vezes a mediana, provavelmente a primeira execução com o disco frio. Por isso reportamos a mediana e o intervalo, e não um único valor. A segunda é que a diferença não vem de um único fator. O pandas lê e converte um arquivo de texto inteiro a cada execução, enquanto o motor colunar lê só as colunas que a consulta usa, de um formato binário, e executa em paralelo em vários núcleos. O arquivo de 122 MB cabe com folga na memória, de modo que o ganho medido não vem de falta de memória. Como a diferença se comporta quando o dado deixa de caber na memória não foi medido.
+O resultado deixa de fora uma parte da fato: 9.349 contratos com 200 mil linhas (4,7%), 45.271 com 1 milhão (4,5%) e 78.795 no volume completo (3,9%). Medimos a causa no volume completo: os 78.795 são todos contratos cujo fornecedor não tem raiz de CNPJ (pessoa física, estrangeiro ou identificador irregular), e a junção interna com a dimensão de fornecedor os descarta. Nenhum contrato fica de fora por município (todos têm código IBGE presente na dimensão) nem por raiz ausente na dimensão. Esses contratos somam R$ 16,9 bilhões, que, somados aos R$ 754,3 bilhões do resultado, dão R$ 771,2 bilhões, o mesmo valor do recorte. O número é coerente com os 82.784 contratos sem raiz de CNPJ do ano inteiro (74.433 de pessoa física, 6.877 estrangeiros e 1.474 de PJ com identificador irregular), dos quais alguns saem antes, no filtro de valor. Isso importa para o KPI de participação feminina: é o universo de fornecedores sem quadro societário, que o projeto declara à parte.
+
+O motor colunar foi de 15 a 48 vezes mais rápido que o pandas, e a razão cresce com o volume. É preciso registrar duas ressalvas sobre o número do volume completo. A primeira é a variação: o pandas oscilou entre 3,1 s e 8,5 s nas cinco execuções (a primeira, 4,7 s, não foi a mais lenta, de modo que não se trata só de disco frio), e a razão deu 35 vezes numa rodada anterior, feita antes de alinhar as faixas de valor (5,710 s contra 0,163 s), 25 vezes em 01/10 e 48,5 vezes em 02/10. Por isso reportamos a mediana e o intervalo, e a razão no volume completo deve ser lida como uma faixa, de cerca de 25 a 48 vezes, e não como um valor único. A segunda é que a diferença não vem de um único fator. O pandas lê e converte um arquivo de texto inteiro a cada execução, enquanto o motor colunar lê só as colunas que a consulta usa, de um formato binário, e executa em paralelo em vários núcleos. O arquivo de 122 MB cabe com folga na memória, de modo que o ganho medido não vem de falta de memória. Como a diferença se comporta quando o dado deixa de caber na memória não foi medido.
 
 O tamanho dos arquivos aponta na mesma direção. As tabelas desta medição ocupam:
 
@@ -68,7 +74,7 @@ Sobre a coleta inteira, os 2.023.134 contratos passam de 3,62 GB em JSONL bruto 
 
 Sobre a contagem de contratos: o recorte de CNPJs tem 2.005.313 contratos e a tabela de fatos desta medição, 2.005.068. A diferença, 245, é a mesma que separa as contagens de contratos de valor zero ou negativo (17.823 no Parquet e 17.578 no recorte): a fato da medição exclui todos os 17.823, e o recorte exclui 245 a menos. A explicação não está confirmada. Se os dois scripts leem o mesmo Parquet, o arredondamento do valor no tratamento não explica a diferença, porque afetaria os dois do mesmo modo; as hipóteses a verificar são o filtro de valor do `recorte_cnpjs.py` (por exemplo, tratar só valor igual a zero, e deixar passar valores negativos) e o tratamento de nulos. `[PENDENTE: contar, no Parquet, os contratos com valor igual a zero, menor que zero e nulo, e conferir o filtro do recorte; se o recorte aceita valor negativo, a RN-02 está descumprida por 245 contratos e isso deve ser declarado]`
 
-O teste pode ser reproduzido com `python benchmark_banco.py`.
+O teste pode ser reproduzido com `python benchmark_banco.py` (prepara os arquivos e roda no volume completo) e com `python benchmark_banco.py --linhas N` (usa os arquivos já preparados).
 
 ### A medição no PostgreSQL
 
@@ -96,7 +102,17 @@ O que as medições mostram:
 - **Os índices só mostraram efeito na escala maior.** Com 200 mil linhas o tempo no servidor ficou igual (1,537 s e 1,593 s); com 1 milhão caiu de 14,292 s para 6,010 s, 2,4 vezes. O efeito sobre consultas seletivas, como as do drill-down, não foi medido.
 - **A consulta sobre a fato inteira não é viável no nó gratuito.** Com metade da fato, ela levou 6,0 s no servidor com índices; com a fato completa, o servidor derrubou a conexão.
 
-**Conclusão da comparação.** Nesta consulta, que agrega a fato inteira sem filtro, o PostgreSQL do nó gratuito não é a abordagem mais rápida. O motor colunar percorreu as 2.005.068 linhas em 0,234 s e o pandas em 5,9 s, enquanto o PostgreSQL levou 6,0 s no servidor com a metade das linhas e não terminou com a fato completa. Os tempos vêm de máquinas e volumes diferentes e não são comparáveis linha a linha, mas a ordem de grandeza basta para a decisão do projeto: o painel não consulta a fato a cada interação, e sim agregados calculados previamente. A razão de o PostgreSQL ser a camada de serviço não é a velocidade de uma consulta isolada, e sim a concorrência, os índices, a integridade referencial e o atendimento a vários usuários ao mesmo tempo, que este teste não mede. O argumento central deste documento, a forma relacional do dado, não depende do cronômetro: o tempo medido apoia a decisão de materializar agregados, e não a de preferir o banco por velocidade.
+**Mesmo volume, três abordagens** (mediana, em segundos). As máquinas são diferentes: pandas e DuckDB rodaram numa máquina local com 12 processadores lógicos e 7,67 GiB de memória, e o PostgreSQL no nó gratuito da Aiven, com 1 CPU e 1 GB.
+
+| linhas na fato | pandas | DuckDB | PostgreSQL, no servidor, com índices |
+| --- | --- | --- | --- |
+| 200 mil | 0,588 | 0,039 | 1,593 |
+| 1 milhão | 1,691 | 0,078 | 6,010 |
+| 2.005.068 | 5,419 | 0,112 | a conexão caiu |
+
+Com os mesmos volumes, o PostgreSQL gratuito levou 2,7 vezes o tempo do pandas com 200 mil linhas e 3,6 vezes com 1 milhão, sem contar a rede (o tempo medido no cliente foi de 1,624 s e 9,204 s). O resultado do PostgreSQL também tem 12 linhas, mas a conferência dos totais contra o DuckDB não aparece nas saídas dessas rodadas.
+
+**Conclusão da comparação.** Nesta consulta, que agrega a fato inteira sem filtro, o PostgreSQL do nó gratuito não é a abordagem mais rápida. O motor colunar percorreu as 2.005.068 linhas em 0,11 a 0,23 s e o pandas em 5,4 a 5,9 s, conforme a rodada, enquanto o PostgreSQL levou 6,0 s no servidor com a metade das linhas e não terminou com a fato completa. Os volumes agora são os mesmos, mas as máquinas são diferentes, e por isso os tempos valem como ordem de grandeza, não como razão exata. Isso basta para a decisão do projeto: o painel não consulta a fato a cada interação, e sim agregados calculados previamente. A razão de o PostgreSQL ser a camada de serviço não é a velocidade de uma consulta isolada, e sim a concorrência, os índices, a integridade referencial e o atendimento a vários usuários ao mesmo tempo, que este teste não mede. O argumento central deste documento, a forma relacional do dado, não depende do cronômetro: o tempo medido apoia a decisão de materializar agregados, e não a de preferir o banco por velocidade.
 
 A rodada completa (`--linhas 0`) não deve ser repetida no nó gratuito. O ensaio de 200 mil linhas e a rodada de 1 milhão podem ser reproduzidos com `python benchmark_postgres.py --linhas 200000` e `--linhas 1000000`, com o serviço ligado. As evidências estão em `docs/evidencias/` (`benchmark_postgres_ensaio_200k.txt`, `benchmark_postgres_1M.txt`, `benchmark_postgres_falha_2M.txt` e `aiven_uso_do_no.png`).
 
@@ -167,16 +183,14 @@ O filtro de agregação mínima da RN-09, que impede exibir resultado baseado em
 
 Adotamos PostgreSQL, no plano gratuito da Aiven, com modelo estrela e tabela ponte, porque a análise é inteiramente feita de junções entre entidades de cardinalidade conhecida, e porque a relação muitos para muitos entre empresa e sócio exige uma tabela de ligação que um modelo de documentos resolveria pior.
 
-Mantemos o Parquet como camada analítica, medida como cerca de 25 vezes mais rápida que arquivos CSV na consulta representativa e cerca de catorze vezes menor que o bruto, e é nela que o tratamento acontece. O banco recebe só o recorte reduzido e modelado em estrela. No nó gratuito, a mesma consulta sobre a fato completa não chegou a terminar (a conexão caiu) e, com 1 milhão de linhas, levou 6,0 s no servidor; por isso o painel lê agregados materializados, e a escolha do banco se apoia na forma do dado, não na velocidade.
+Mantemos o Parquet como camada analítica, medida como de 25 a 48 vezes mais rápida que arquivos CSV na consulta representativa, no volume completo e cerca de catorze vezes menor que o bruto, e é nela que o tratamento acontece. O banco recebe só o recorte reduzido e modelado em estrela. No nó gratuito, a mesma consulta sobre a fato completa não chegou a terminar (a conexão caiu) e, com 1 milhão de linhas, levou 6,0 s no servidor; por isso o painel lê agregados materializados, e a escolha do banco se apoia na forma do dado, não na velocidade.
 
 Reservamos o não relacional para o texto livre do objeto do contrato, que é onde há dado sem esquema fixo e onde a busca textual justifica um índice invertido, e cuja permanência no banco relacional, além disso, não caberia no orçamento de disco.
 
 ## Pendências deste documento
 
-- Registrar a memória RAM da máquina (versões e núcleos já estão registrados).
-- Conferir que as duas abordagens locais devolvem os mesmos totais, e não só o mesmo número de linhas.
 - Confirmar a explicação dos 245 contratos de diferença e das 3.692 raízes a mais na dimensão de fornecedor.
 - Medir o tamanho da fato reduzida final na carga da Fase 2.
 - Medir no PostgreSQL uma consulta seletiva, como a do drill-down, onde o índice deve contar.
-- Se houver tempo, rodar o pandas com 200 mil e 1 milhão de linhas, os mesmos volumes do PostgreSQL.
+- Conferir o resultado do PostgreSQL contra o do DuckDB nos mesmos volumes.
 - Investigar a causa da queda da conexão com a fato completa, se o grupo tiver acesso aos logs do serviço.
