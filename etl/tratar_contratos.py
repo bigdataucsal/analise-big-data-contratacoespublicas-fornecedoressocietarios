@@ -1,36 +1,20 @@
 """
-Tratamento dos contratos brutos do PNCP -> camada analitica + carga no Aiven.
-=============================================================================
-Le os JSONL brutos, achata o aninhado, tipa, normaliza, deduplica e grava:
+Tratamento dos contratos brutos do PNCP.
 
-  1. dados/parquet/contratos/ano_mes=AAAA-MM/*.parquet  (camada analitica)
-  2. dados/saida_postgres/contratos/ano_mes=AAAA-MM/*.csv  (carga no Aiven)
+Le os JSONL, achata os campos aninhados, converte tipos, normaliza e deduplica
+por numeroControlePNCP, gravando duas saidas: Parquet particionado por mes,
+que e a camada analitica, e CSV por mes, que alimenta a carga no PostgreSQL.
 
-NAO escreve em dados/raw/. Os arquivos do extrator original
-(contratos_2025.jsonl e contratos_2025.checkpoint) sao lidos e nunca alterados.
+Valores monetarios vao para DECIMAL e CNPJ permanece como texto. O schema de
+leitura e declarado em vez de inferido, porque shards diferentes inferem tipos
+diferentes quando uma coluna e sempre nula.
 
-Por que DuckDB e nao pandas
----------------------------
-O bruto completo e ~2 milhoes de contratos em JSON aninhado (~3,5 GB). Com
-pandas isso exige carregar tudo em memoria e achatar linha a linha em Python.
-O DuckDB le o glob de JSONL em paralelo, achata em SQL, processa fora da
-memoria (nao precisa de RAM maior que o dado) e escreve Parquet particionado
-num unico comando. Sem cluster, sem JVM, uma dependencia so -- que e o ponto
-certo para este volume numa maquina. PySpark resolveria, mas num no unico
-paga JVM e shuffle sem ganho.
+Nao escreve em dados/raw/.
 
-Deduplicacao
-------------
-Obrigatoria, nao opcional: o bruto atual ja tem 400 duplicatas (18.900 linhas
-para 18.500 chaves unicas), porque o resume do extrator original regravou
-paginas ja baixadas. A chave natural e numeroControlePNCP; quando ela repete,
-fica a versao com dataAtualizacaoGlobal mais recente.
-
-Uso (rodar de dentro de etl/):
-    python tratar_contratos.py                    # parquet + csv
-    python tratar_contratos.py --formato parquet  # so a camada analitica
-    python tratar_contratos.py --resumo           # nao grava, so perfila
-    python tratar_contratos.py --threads 8
+Uso:
+    python tratar_contratos.py
+    python tratar_contratos.py --formato parquet
+    python tratar_contratos.py --resumo
 """
 
 import argparse
@@ -99,7 +83,7 @@ COLUNAS_BRUTO = {
 }
 
 # SELECT do tratamento. Nomes em snake_case porque o Postgres rebaixa
-# identificador nao aspeado para minusculo -- manter camelCase obrigaria a
+# identificador nao aspeado para minusculo, manter camelCase obrigaria a
 # aspear cada coluna em toda consulta no Aiven.
 SQL_TRATAMENTO = """
 WITH bruto AS (
@@ -141,7 +125,7 @@ tipado AS (
         nullif(trim(codigoPaisFornecedor), '')               AS codigo_pais_fornecedor,
         -- Raiz do CNPJ (8 primeiros digitos): identifica a empresa por tras de
         -- matriz e filiais. E por ela que o cruzamento societario com a Receita
-        -- se sustenta -- o CNPJ completo separaria filiais do mesmo grupo.
+        -- se sustenta, o CNPJ completo separaria filiais do mesmo grupo.
         CASE WHEN upper(trim(tipoPessoa)) = 'PJ'
                   AND length(regexp_replace(niFornecedor, '[^0-9]', '', 'g')) = 14
              THEN left(regexp_replace(niFornecedor, '[^0-9]', '', 'g'), 8)
@@ -198,7 +182,7 @@ deduplicado AS (
 )
 SELECT
     *,
-    strftime(data_publicacao, '%Y-%m') AS ano_mes   -- chave de particao
+    strftime(data_publicacao, '%Y-%m') AS ano_mes, chave de particao
 FROM deduplicado
 """
 
@@ -212,7 +196,7 @@ def montar_sql(fontes) -> str:
 def descobrir_fontes(raw_dir: Path) -> list:
     """Todo JSONL bruto do PNCP que existir.
 
-    Entram os tres formatos que o projeto ja produziu -- o arquivo unico do
+    Entram os tres formatos que o projeto ja produziu, o arquivo unico do
     extrator rapido, os shards diarios da versao anterior dele (se alguem
     ainda tiver) e o arquivo do extrator original. Todos juntos, porque a
     deduplicacao por numeroControlePNCP resolve a sobreposicao entre eles.
@@ -282,7 +266,7 @@ def gravar_csv_postgres(con, sql: str, destino: Path) -> None:
 def fmt_br(valor, casas: int = 0) -> str:
     """Numero no padrao brasileiro: 12.739.091.038,69.
 
-    Um replace(',', '.') sozinho nao serve -- trocaria tambem o separador
+    Um replace(',', '.') sozinho nao serve, trocaria tambem o separador
     decimal do format(), virando 12.739.091.038.69.
     """
     texto = f"{valor:,.{casas}f}"

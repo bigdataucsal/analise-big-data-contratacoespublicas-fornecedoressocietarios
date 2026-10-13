@@ -32,7 +32,7 @@ log = logging.getLogger("baixar_receita")
 try:
     import config as cfg
 except ImportError:
-    log.error("config.py não encontrado — este script precisa estar na mesma pasta que ele (etl/).")
+    log.error("config.py não encontrado, este script precisa estar na mesma pasta que ele (etl/).")
     raise
 
 BASE_DIR = Path(__file__).resolve().parent     # etl/
@@ -54,7 +54,7 @@ for _dir in (RAW_DIR, INVENTORY_DIR, PARQUET_DIR):
 
 # O servidor oficial da Receita derruba conexão vinda de IP de nuvem (confirmado testando Kaggle e
 # outros runners); por isso o mirror comunitário atrás da Cloudflare vem primeiro. As pastas de
-# competência mudam de formato entre as fontes (YYYY-MM na oficial, YYYY-MM-DD no mirror) — o regex
+# competência mudam de formato entre as fontes (YYYY-MM na oficial, YYYY-MM-DD no mirror), o regex
 # de descoberta aceita os dois.
 FONTES_PADRAO = [
     ("mirror (casadosdados, atrás da Cloudflare)", "https://dados-abertos-rf-cnpj.casadosdados.com.br/arquivos"),
@@ -136,7 +136,7 @@ def escolher_fonte_disponivel(sessao: requests.Session, fontes=FONTES_PADRAO, ti
             resp.raise_for_status()
             log.info("Fonte escolhida: %s -> %s", nome, base)
             return base, resp
-        except Exception as e:  # noqa: BLE001 — queremos seguir pra próxima fonte em qualquer falha
+        except Exception as e:  # noqa: BLE001, queremos seguir pra próxima fonte em qualquer falha
             log.warning("  %s indisponível (%s); tentando próxima...", nome, e)
     raise RuntimeError("Nenhuma fonte de dados da Receita respondeu.")
 
@@ -144,7 +144,7 @@ def escolher_fonte_disponivel(sessao: requests.Session, fontes=FONTES_PADRAO, ti
 def listar_zips(sessao: requests.Session, base: str, resp_inicial=None, competencia: str | None = None):
     """Descobre .zip a partir de uma base: se houver pastas YYYY-MM ou YYYY-MM-DD, entra na pedida
     (ou na mais recente, se `competencia` não for informada); senão assume que os .zip já estão
-    listados na própria página. Devolve (urls_zip, competencia_usada) — competencia_usada é None
+    listados na própria página. Devolve (urls_zip, competencia_usada), competencia_usada é None
     quando a fonte não usa pastas por competência."""
     url_base = base if base.endswith("/") else base + "/"
     resp = resp_inicial if resp_inicial is not None else sessao.get(url_base, timeout=30)
@@ -169,7 +169,7 @@ def listar_zips(sessao: requests.Session, base: str, resp_inicial=None, competen
 
 
 def get_latest_folder() -> str | None:
-    """Descobre a competência mais recente disponível, sem baixar nada — nome alinhado com o
+    """Descobre a competência mais recente disponível, sem baixar nada, nome alinhado com o
     comentário do config.py (`cnpj-processor.get_latest_folder()`)."""
     sessao = criar_sessao()
     base, resp_inicial = escolher_fonte_disponivel(sessao)
@@ -344,7 +344,7 @@ def filtrar_para_parquet(membros: list[dict], lista_cnpjs: set[str], pasta_desti
                           chunksize: int = 300_000) -> dict[str, Path]:
     """Filtra cada arquivo (empresas/estabelecimentos/sócios/simples) contra `lista_cnpjs`,
     lendo em chunks direto de dentro do zip, e salva um .parquet por layout. Tabelas de domínio
-    (CNAE, município, país...) não têm `cnpj_basico` — são copiadas inteiras, sem filtro, porque
+    (CNAE, município, país...) não têm `cnpj_basico`, são copiadas inteiras, sem filtro, porque
     são pequenas tabelas de referência usadas por qualquer linha, não por CNPJ específico."""
     pasta_destino.mkdir(parents=True, exist_ok=True)
     saidas: dict[str, list[pd.DataFrame]] = {}
@@ -360,7 +360,7 @@ def filtrar_para_parquet(membros: list[dict], lista_cnpjs: set[str], pasta_desti
                                        dtype=str, chunksize=chunksize, on_bad_lines="warn", engine="python"):
                 # A Receita pode acrescentar coluna numa competência futura. Sem
                 # esta checagem, o pandas alinharia errado em silêncio e o dado
-                # sairia deslocado -- o pior tipo de falha, porque não avisa.
+                # sairia deslocado, o pior tipo de falha, porque não avisa.
                 if lidas == 0 and len(pedaco.columns) != len(colunas):
                     raise SystemExit(
                         f"ERRO: {item['membro']} tem {len(pedaco.columns)} colunas, "
@@ -374,7 +374,7 @@ def filtrar_para_parquet(membros: list[dict], lista_cnpjs: set[str], pasta_desti
                     saidas.setdefault(layout_key, []).append(trecho)
         descartadas[layout_key] = descartadas.get(layout_key, 0) + lidas
         log.info("Processado %s (%s): %d linha(s) lida(s)%s", item["membro"], layout_key,
-                  lidas, "" if tem_cnpj else " — tabela de domínio, copiada inteira")
+                  lidas, "" if tem_cnpj else ", tabela de domínio, copiada inteira")
 
     caminhos: dict[str, Path] = {}
     linhas_salvas: dict[str, int] = {}
@@ -403,7 +403,7 @@ def escrever_manifesto(pasta_destino: Path, caminhos: dict[str, Path],
     "moeda", "texto") eram escritos e nunca lidos: quem consome o LAYOUTS faz
     `[c for c, _ in ...]` e descarta o tipo. Era uma promessa que o código não
     cumpria, e alguém acabaria confiando nela. O parquet continua saindo com
-    tudo em texto, que é o certo -- converter é trabalho do tratamento --, mas
+    tudo em texto, que é o certo, converter é trabalho do tratamento --, mas
     agora o tratamento recebe por escrito quais colunas são data e quais são
     moeda, em vez de ter que adivinhar ou duplicar a tabela.
 

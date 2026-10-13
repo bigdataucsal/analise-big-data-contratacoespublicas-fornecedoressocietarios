@@ -215,7 +215,7 @@ junção.
 | orgaoEntidade.cnpj | Q1, Q3 | órgão contratante |
 | unidadeOrgao.codigoIbge | Q2 | município, em código IBGE |
 | dataPublicacaoPncp, dataAssinatura | Q1, Q2, Q3 | eixo temporal |
-| numeroControlePNCP | — | chave natural, para deduplicação |
+| numeroControlePNCP | (nenhuma) | chave natural, para deduplicação |
 
 ---
 

@@ -1,52 +1,19 @@
 """
-Tradução do código de município da Receita Federal para o código do IBGE.
-=====================================================================
-Fecha a única junção do modelo estrela que não tinha chave.
+Traduz o codigo de municipio da Receita Federal para o codigo do IBGE.
 
-O problema
-----------
-Três fontes, duas codificações de município:
+A tabela de dominio da Receita traz so codigo e descricao, sem o codigo do
+IBGE, que e o que o PNCP e o SIDRA usam. O casamento e por nome normalizado,
+desambiguado pela UF que o arquivo de estabelecimentos traz na mesma linha.
 
-    PNCP            traz codigoIbge (7 dígitos)          -> IBGE
-    Censo / SIDRA   traz o código do município           -> IBGE
-    Receita         traz código PRÓPRIO na coluna 21      -> Receita
+Na normalizacao o apostrofo e apagado e nao vira espaco: o IBGE escreve
+"Alta Floresta D'Oeste" e a Receita "ALTA FLORESTA DOESTE".
 
-O `dim_municipio` do modelo estrela é chaveado por código IBGE, porque é o
-que duas das três fontes falam. Sem tradução, a coluna
-`dim_fornecedor.id_municipio_sede` não tem como ser preenchida, e a RN-06,
-que atribui a composição racial do território à empresa, não fecha.
+Entrada: dados/proxy/cor_raca_municipio_2022.csv e dados/raw/receita/*.zip
+Saida:   dados/proxy/municipios_receita_ibge.csv
 
-A tabela de domínio de municípios da Receita (MUNICCSV) traz apenas código e
-descrição. Ela não tem o código do IBGE, e não há tabela de correspondência
-publicada junto com o conjunto.
-
-A solução
----------
-Casar por nome, desambiguando por UF.
-
-O nome sozinho não basta: há 5.570 municípios e muitos repetem nome entre
-estados. Mas o arquivo de estabelecimentos traz UF (coluna 20) e código de
-município da Receita (coluna 21) na mesma linha, então dá para descobrir em
-que UF cada código da Receita ocorre e restringir o casamento a ela.
-
-A normalização derruba acento, caixa, hífen e apóstrofo, que é onde as duas
-grafias divergem: "Alta Floresta D'Oeste" contra "ALTA FLORESTA DOESTE",
-"Santa Bárbara d'Oeste" contra "SANTA BARBARA DOESTE".
-
-Casos que sobrarem sem par são reportados, não silenciados. Uma tradução
-incompleta que se apresenta como completa contamina o proxy territorial
-inteiro sem dar sinal.
-
-Uso (rodar de dentro de etl/):
-    python traduzir_municipios.py                # usa o que houver em disco
-    python traduzir_municipios.py --so-conferir  # não grava, só mede cobertura
-
-Entrada:
-    dados/proxy/cor_raca_municipio_2022.csv   lado IBGE (nome e UF)
-    dados/raw/receita/*.zip                   lado Receita (MUNICCSV e ESTABELE)
-
-Saída:
-    dados/proxy/municipios_receita_ibge.csv   codigo_receita, codigo_ibge, ...
+Uso:
+    python traduzir_municipios.py
+    python traduzir_municipios.py --so-conferir
 """
 
 import argparse

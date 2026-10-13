@@ -4,7 +4,7 @@
 -- desenho nao cabia: estimado a partir da amostra de janeiro, daria cerca
 -- de 1,9 GB entre dados e indices para os 2 milhoes de contratos, contra um
 -- orcamento utilizavel de 500 a 700 MB. O limite de 1 GB da Aiven e o
--- DISCO do servico, nao a soma das tabelas -- contam indices, WAL, arquivos
+-- DISCO do servico, nao a soma das tabelas, contam indices, WAL, arquivos
 -- temporarios de consulta e bloat; so os backups ficam de fora.
 --
 -- A normalizacao e o que resolve. Nome de orgao, de unidade, de municipio
@@ -107,7 +107,7 @@ CREATE TABLE IF NOT EXISTS dim_socio (
     identificador_tipo SMALLINT,           -- 1 PJ, 2 PF, 3 estrangeiro
     -- CPF mascarado da Receita, no formato 000***718468**. Preserva os seis
     -- digitos do meio, o que basta para agrupar o mesmo socio entre
-    -- empresas -- que e o que a analise de rede precisa -- sem identificar
+    -- empresas, que e o que a analise de rede precisa, sem identificar
     -- a pessoa. Pela RN-09 ele e chave interna e nunca vai a apresentacao.
     cpf_mascarado      TEXT UNIQUE,
     identificador_pub  TEXT NOT NULL UNIQUE,  -- derivado, e este que aparece no painel
@@ -237,7 +237,7 @@ CREATE INDEX IF NOT EXISTS ix_socio_genero    ON dim_socio (genero);
 -- Um no gratuito com 1 GB de memoria nao sustenta consulta analitica
 -- pesada a cada clique de filtro no painel. Alem da lentidao, consulta
 -- com ordenacao e juncao grande gera arquivo temporario em disco, que
--- consome a MESMA cota de 1 GB -- ou seja, o painel lento tambem enche o
+-- consome a MESMA cota de 1 GB, ou seja, o painel lento tambem enche o
 -- disco. Materializar resolve os dois problemas.
 --
 -- Pendente para a carga da Fase 2, e declarado na RN-02 e na RN-05: esta

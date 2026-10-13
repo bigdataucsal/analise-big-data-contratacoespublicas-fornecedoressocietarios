@@ -1,71 +1,21 @@
 """
-Gera a lista de CNPJs do recorte -- a entrega da T3 que destrava a T2.
-=====================================================================
-A base do CNPJ da Receita Federal e publicada como ZIP monoliticos: nao
-existe filtro por CNPJ no servidor, entao a T2 baixa tudo e filtra na
-hora de parsear. O que a T2 precisa da T3 nao e o download, e a LISTA
-contra a qual filtrar.
+Monta a lista de CNPJs que define o universo da analise.
 
-Este script produz essa lista a partir dos contratos do PNCP ja baixados.
-Pode rodar antes do download terminar: sai uma lista preliminar, boa para
-a T2 desenvolver e testar o parser, e depois e so rodar de novo para
-gerar a definitiva.
+Le os contratos do PNCP ja coletados, aplica os criterios de valor da RN-02 e
+opcionalmente o recorte de orgaos, e grava as raizes de CNPJ distintas. E essa
+lista que o baixar_receita.py usa para filtrar os arquivos da Receita.
 
-Saida (em config.DIR_RECORTE, que e etl/dados/recorte/):
-    cnpjs_raiz.csv        CSV com cabecalho `cnpj_basico`, um por linha.
-                          E ESTE o arquivo que o baixar_receita.py consome:
-                              python baixar_receita.py
-                                  --filtrar-cnpjs dados/recorte/cnpjs_raiz.csv
-    cnpjs_raiz.txt        a mesma lista sem cabecalho, para leitura humana
-    cnpjs_completos.txt   CNPJ de 14 digitos, para conferencia. NAO serve de
-                          filtro: o quadro societario e chaveado pela raiz,
-                          e filtrar por 14 digitos devolveria zero linhas.
-    orgaos_recorte.csv    os orgaos escolhidos, com contratos e valor
-    recorte.md            o recorte por escrito, para o README
+Saida em config.DIR_RECORTE:
+    cnpjs_raiz.csv        CSV com cabecalho cnpj_basico, consumido pelo filtro
+    cnpjs_raiz.txt        a mesma lista sem cabecalho
+    cnpjs_completos.txt   CNPJ de 14 digitos, so para conferencia
+    orgaos_recorte.csv    orgaos selecionados, quando ha recorte
+    recorte.md            o recorte por escrito
 
-Do que sai daqui, so o recorte.md vai para o repositorio. As listas de CNPJ
-e o orgaos_recorte.csv deixaram de ser versionados e precisam ser regerados a
-partir do bruto do PNCP, que tambem nao e versionado.
-
-Uso (rodar de dentro de etl/):
-    python recorte_cnpjs.py --todos-orgaos       # recorte nacional, o usado no projeto
-    python recorte_cnpjs.py                      # top 50 orgaos (plano inicial, abandonado)
+Uso:
+    python recorte_cnpjs.py --todos-orgaos
     python recorte_cnpjs.py --top-orgaos 100
-    python recorte_cnpjs.py --sem-corte-sanidade # mantem os outliers
-
-O filtro "valor > 0" daqui le o valor do JSON bruto. O tratamento grava o valor
-em centavos, e por isso a fato tem 245 contratos a menos no ano: valores
-positivos menores que meio centavo, que viram zero (RN-02).
-
-Sobre o corte de sanidade
--------------------------
-Medido em 20/09/2026 sobre 58.769 contratos (1 a 20 de janeiro), contando os
-de valor zero:
-
-    mediana do contrato  R$      4.153,50
-    media                R$ 45.013.038,24     <- 10.837x a mediana
-    maior contrato       R$ 640.000.000.000,00
-
-26 contratos (0,04% da base) concentram 98,7% do valor somado, e os
-quatro maiores sao de R$ 640 bilhoes, R$ 640 bilhoes, R$ 562 bilhoes e
-R$ 250 bilhoes, todos do mesmo orgao. Nao sao contratos: sao erros de
-digitacao na origem, provavelmente valor sem separador decimal.
-
-Isso importa porque "top N orgaos por valor" e um criterio de recorte, e
-com os outliers dentro ele seleciona os orgaos errados: passa a premiar
-quem digitou errado. Com o corte em R$ 1 bilhao, os top 50 respondem por
-71% do valor; sem o corte, por 99,6% -- um numero que parece otimo e nao
-significa nada.
-
-O limite de R$ 1 bilhao e defensavel mas e uma escolha: e uma ordem de
-grandeza acima do maior contrato federal plausivel para um unico objeto.
-Documentem o valor escolhido e quantos contratos ele exclui.
-
-Atualizacao de 02/10/2026: tudo acima e de janeiro e fica como historico. No
-ano inteiro sao 243 contratos acima de R$ 1 bilhao, com 95,77% do valor bruto,
-e o maior passa de R$ 6 trilhoes. Parte e erro de escala e parte parece teto
-estimado de credenciamento, hipotese ainda a confirmar. Os numeros do ano estao
-em docs/5-vs.md e na RN-02.
+    python recorte_cnpjs.py --sem-corte-sanidade
 """
 
 import argparse

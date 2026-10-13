@@ -1,46 +1,19 @@
 """
-Composicao de cor ou raca por municipio, do Censo 2022 (proxy territorial).
-=====================================================================
-Entrega da T3. Baixa do SIDRA a populacao residente por cor ou raca em
-todos os municipios e monta a tabela de dimensao que o modelo estrela usa
-para o proxy ecologico.
+Composicao de cor ou raca por municipio, do Censo 2022.
 
-O que este dado e, e o que ele NAO e
-------------------------------------
-Ele descreve o TERRITORIO, nunca a pessoa. O indicador resultante permite
-dizer "esse recurso publico foi para empresas sediadas em municipios com
-tal composicao racial". Nao permite dizer nada sobre a cor ou raca de um
-socio, e essa distincao e o que mantem o projeto dentro da LGPD: cor e
-raca sao dado sensivel pelo art. 5 da lei, e inferir no nivel individual
-por cruzamento seria reidentificacao.
+Baixa do SIDRA a populacao residente por cor ou raca em todos os municipios e
+monta a dimensao usada no proxy territorial. O indicador descreve o territorio
+e nunca uma pessoa.
 
-E inferencia ecologica, com a limitacao classica desse metodo: a
-composicao do grupo nao se transfere para o individuo. Declarar isso e
-obrigatorio no relatorio.
+Os valores vem como texto: traco significa zero e reticencias significam dado
+nao disponivel, que vira nulo.
 
-Fonte
------
-IBGE, Censo Demografico 2022, via API de agregados v3.
+Saida: dados/proxy/cor_raca_municipio_<ano>.csv
 
-    agregado 9605  "Populacao residente, por cor ou raca, nos Censos"
-    variavel 93    populacao residente, em pessoas
-    classificacao 86, "Cor ou raca", com as categorias
-                   2776 Branca | 2777 Preta | 2778 Amarela
-                   2779 Parda  | 2780 Indigena | 95251 Total
-    nivel N6       municipio (todos os 5.570 de uma vez)
-
-O agregado 9605 traz 2010 e 2022 na mesma tabela, ja harmonizados, o que
-o torna preferivel a outras tabelas de cor e raca.
-
-Para cruzar cor/raca COM SEXO existe o agregado 9606, que acrescenta a
-classificacao 2 (sexo: 4 homens, 5 mulheres) e a 287 (idade). Ao usa-lo,
-fixe sempre 287[100362] para pegar so o total de idade -- sem isso a API
-devolve as 134 faixas etarias e o payload explode.
-
-Uso (rodar de dentro de etl/):
+Uso:
     python baixar_proxy_racial.py
-    python baixar_proxy_racial.py --com-sexo     # usa o agregado 9606
-    python baixar_proxy_racial.py --ano 2010     # para comparar censos
+    python baixar_proxy_racial.py --com-sexo
+    python baixar_proxy_racial.py --ano 2010
 """
 
 import argparse
@@ -71,7 +44,7 @@ def valor_para_int(bruto):
                tipicamente nas categorias amarela e indigena de municipios
                pequenos. Vira 0.
         '...'  dado NAO DISPONIVEL. Aparece 30 vezes no Censo 2010 e
-               nenhuma no de 2022. Vira None, nunca 0 -- tratar ausencia
+               nenhuma no de 2022. Vira None, nunca 0, tratar ausencia
                como zero inventaria populacao que o IBGE nao mediu e
                contaminaria o percentual.
 
@@ -184,7 +157,7 @@ def main() -> int:
     print(f"   {len(municipios)} municipios em {time.time()-inicio:.0f}s")
 
     if not municipios:
-        print("ERRO: nenhuma linha extraida -- a estrutura da resposta mudou?")
+        print("ERRO: nenhuma linha extraida, a estrutura da resposta mudou?")
         return 1
 
     colunas_cor = list(CATEGORIAS.values())
@@ -238,7 +211,7 @@ def main() -> int:
     print(f"   {len(linhas)} municipios, {len(cabecalho)} colunas")
     if indefinidos:
         print(f"   {indefinidos} municipio(s) com alguma categoria nao medida "
-              f"('...' no SIDRA) -- total e percentual ficaram nulos")
+              f"('...' no SIDRA), total e percentual ficaram nulos")
     elif sem_dado:
         print(f"   ATENCAO: {sem_dado} municipio(s) com total zero")
     if pcts:

@@ -19,14 +19,14 @@ ORGAOS_RECORTE = None      # ex: ["00394429000102"] (lista de CNPJs)
 # --- Receita Federal (CNPJ): snapshot mensal, nao e recorte por ano ---
 # Preenchido em tempo de execucao pelo cnpj-processor.get_latest_folder();
 # guardem aqui o valor usado de fato assim que descobrirem, para reprodutibilidade.
-MES_RECEITA = "2026-09-14"  # ex: "2026-01" -- atualizem apos rodar baixar_receita.py
+MES_RECEITA = "2026-09-14"  # ex: "2026-01", atualizem apos rodar baixar_receita.py
 
 # --- Caminhos ------------------------------------------------------------
 # Ancorados no diretorio DESTE arquivo (etl/), nao no diretorio de onde o
 # script foi chamado. Isso importa: com caminho relativo ao cwd, rodar
 # `python etl/baixar_pncp_rapido.py` da raiz do repositorio criava uma arvore
 # `dados/` paralela la, separada da que vive em `etl/dados/`. Aconteceu de
-# verdade -- 109 MB de PNCP foram parar no lugar errado -- e o mesmo desenho
+# verdade, 109 MB de PNCP foram parar no lugar errado, e o mesmo desenho
 # faria o extrator da Receita gravar numa terceira arvore.
 #
 # Com caminho absoluto, todo script resolve para o mesmo lugar, seja qual for

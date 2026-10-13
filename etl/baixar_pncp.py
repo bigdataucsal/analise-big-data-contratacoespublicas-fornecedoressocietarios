@@ -1,7 +1,7 @@
 """
 Extrator de contratos do PNCP (API publica, sem autenticacao).
 ==================================================================
-Le o recorte de config.py -- NAO troquem as datas aqui, troquem la.
+Le o recorte de config.py, NAO troquem as datas aqui, troquem la.
 
 Uso (rodar de dentro de etl/):
     python baixar_pncp.py
@@ -23,7 +23,7 @@ import requests
 import config
 
 BASE_URL = "https://pncp.gov.br/api/consulta/v1/contratos"
-TAMANHO_PAGINA = 100  # reduzido de 500 -- paginas menores respondem mais rapido
+TAMANHO_PAGINA = 100  # reduzido de 500, paginas menores respondem mais rapido
                        # e caem menos em 504 no servidor do PNCP
 TIMEOUT_SEGUNDOS = 90
 MAX_TENTATIVAS = 5

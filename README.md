@@ -1,4 +1,4 @@
-# Big Data e Analytics — Tema 9: Contratações Públicas e Fornecedores Societários
+# Big Data e Analytics - Tema 9: Contratações Públicas e Fornecedores Societários
 
 Repositório destinado ao projeto prático da disciplina de Big Data e Analytics. Este projeto mapeia quem são as pessoas físicas por trás dos CNPJs que recebem recursos públicos federais, analisando potenciais assimetrias no controle do fornecimento ao Estado.
 

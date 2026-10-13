@@ -1,69 +1,19 @@
 """
-Inferencia de genero pelo primeiro nome (RN-04), com o Censo 2022 do IBGE.
-=====================================================================
-Entrega da T3. Classifica um nome como feminino ou masculino quando a
-frequencia da categoria dominante na base de nomes do IBGE (Censo 2022)
-atinge o limiar definido, e como indeterminado caso contrario.
+Inferencia de genero pelo primeiro nome (RN-04).
 
-A taxa de indeterminados NAO e falha do metodo: e o resultado que torna
-o erro mensuravel. Reportar essa taxa e o que separa inferencia honesta
-de chute, e ela precisa aparecer no README e no pitch.
+Consulta a base de nomes do Censo 2022 do IBGE e classifica como feminino ou
+masculino quando a proporcao dominante atinge o limiar; abaixo disso fica
+indeterminado. O denominador e a soma de masculino e feminino.
 
-Como funciona
--------------
-Para cada primeiro nome DISTINTO, normaliza (maiusculas, sem acento) e faz
-uma unica chamada, que ja devolve os dois sexos:
+Nome composto nao funciona na API, so o primeiro token isolado. Nomes raros
+sao suprimidos na origem e caem em indeterminado. O resultado de cada nome
+distinto fica em cache no disco.
 
-    GET https://servicodados.ibge.gov.br/api/v3/nomes/2022/nome/vanessa
-        ?tipo=nome&localidade=0        (localidade 0 = Brasil)
-
-    campos usados: "mulheres" e "homens"
-
-A proporcao dominante decide a classificacao. Exemplo capturado em
-29/09/2026 (o "frequencia" da resposta e a soma dos dois sexos):
-
-    VANESSA  396.406 F contra 1.468 M  -> 99,6% F  -> feminino
-
-Origem do endereco
-------------------
-O endereco v3 foi capturado pelo DevTools do navegador no site Nomes no
-Brasil (censo2022.ibge.gov.br/nomes), em 29/09/2026. NAO confirmei que ele
-conste da documentacao publica da API. Por isso: (1) cada resposta fica em
-cache em disco, que e o dado bruto do projeto e nao vai para o git; (2)
-registrem no README a data de acesso e o endereco usado.
-
-Limites da fonte, que precisam estar declarados no trabalho
------------------------------------------------------------
-1. So o primeiro nome. Segundo a nota tecnica 01/2025 do IBGE, do campo
-   "nome" so o primeiro nome informado e divulgado. Por isso so o primeiro
-   token e consultado.
-2. Nome raro e suprimido: so aparecem nomes com 20 ou mais ocorrencias no
-   Brasil (15 por UF, 10 por municipio). Nomes estrangeiros e grafias raras
-   caem em indeterminado.
-3. Variantes de grafia contam separadas (ANA e ANNA, LUIS e LUIZ). Cada
-   variante tem a sua propria proporcao entre os sexos, e e ela que se usa.
-4. Acentos nao existem na base; normalizamos antes de consultar.
-5. O sexo e o informado no momento da coleta do Censo, em 1 de agosto de 2022.
-
-Privacidade (RN-09)
--------------------
-O nome completo de socio nunca e gravado. O cache guarda so o primeiro nome
-com as duas frequencias, e o CSV de saida e agregado por primeiro nome
-(sem sobrenome e sem documento).
-
-Cache
------
-Muitas pessoas compartilham o primeiro nome, entao a consulta e feita por
-nome DISTINTO e guardada em disco (dados/cache/nomes_ibge_2022.json). Rodar
-de novo nao repete requisicao, o que importa porque e uma API publica.
-
-Uso (rodar de dentro de etl/):
-    python inferir_genero.py                       # 1.000 socios PF de Socios1.zip
-    python inferir_genero.py --limite 200          # teste rapido
-    python inferir_genero.py --limite 0            # todos os PF das linhas lidas
-    python inferir_genero.py --limiar 0.95         # limiar mais exigente
-    python inferir_genero.py --fonte pncp          # fornecedores PF do PNCP
-    python inferir_genero.py --arquivo nomes.txt   # um nome por linha
+Uso:
+    python inferir_genero.py
+    python inferir_genero.py --limite 200
+    python inferir_genero.py --limiar 0.95
+    python inferir_genero.py --arquivo nomes.txt
 """
 
 import argparse
@@ -193,14 +143,14 @@ def classificar(freq_f: int, freq_m: int, limiar: float, minimo: int = MINIMO_OC
     Tres caminhos para indeterminado, e vale distingui-los no relatorio
     porque tem causas diferentes:
 
-    ausente  -- o nome nao aparece na base. O IBGE suprime nomes com menos
+    ausente, o nome nao aparece na base. O IBGE suprime nomes com menos
                 de 20 ocorrencias no Brasil, entao "ausente" nao quer dizer
                 que ninguem se chama assim, e sim que sao poucos. Nomes
                 estrangeiros e grafias raras caem aqui.
-    instavel -- o nome aparece, mas com frequencia total baixa demais para
+    instavel, o nome aparece, mas com frequencia total baixa demais para
                 a proporcao significar alguma coisa. Um nome com 3 registros
                 femininos e nenhum masculino da 100%, e isso e ruido.
-    ambiguo  -- o nome aparece com frequencia boa, mas a proporcao dominante
+    ambiguo, o nome aparece com frequencia boa, mas a proporcao dominante
                 nao alcanca o limiar. E o caso genuinamente ambiguo.
 
     O denominador e sempre M+F, e nao o "frequencia" total da resposta: a

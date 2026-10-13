@@ -401,7 +401,7 @@ controle de capital, ou seja, quem é dono do que recebe recurso público, e um
 administrador contratado sem participação no capital não é dono. Já a RN-05,
 que classifica o controle da empresa por gênero, inclui a administração, porque
 ali a pergunta é sobre quem decide, e administrar é decidir. As duas regras
-usam recortes diferentes de propósito, e as visões materializadas do schema
+usam recortes diferentes, e as visões materializadas do schema
 refletem essa diferença.
 
 É esta regra que determina qual estratégia de redução de volume adotamos.
@@ -456,7 +456,7 @@ O CPF mascarado da Receita preserva os seis dígitos do meio, o que basta para
 agrupar o mesmo sócio entre empresas, que é exatamente o que a análise de rede
 precisa, sem identificar a pessoa.
 
-Vale registrar que essa máscara não é escolha da Receita nem nossa: o PDF de
+Essa máscara não é escolha da Receita nem nossa: o PDF de
 metadados do CNPJ declara que o CPF é descaracterizado por ocultação dos três
 primeiros dígitos e dos dois dígitos verificadores, citando o art. 129 § 2º da
 Lei nº 13.473/2017, a LDO de 2018. O dado já chega desidentificado por

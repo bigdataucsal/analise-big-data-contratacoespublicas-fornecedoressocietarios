@@ -59,12 +59,12 @@ def montar_conexao() -> str:
 def montar_amostra(n_empresas: int) -> tuple[pd.DataFrame, pd.DataFrame]:
     membros = listar_membros_zip(RAW_DIR)
     if not membros:
-        raise RuntimeError(f"Nenhum arquivo em {RAW_DIR} — rodem baixar_receita.py primeiro.")
+        raise RuntimeError(f"Nenhum arquivo em {RAW_DIR}, rodem baixar_receita.py primeiro.")
 
     membros_empresas = [m for m in membros if m["layout"] == "EMPRECSV"]
     membros_socios = [m for m in membros if m["layout"] == "SOCIOCSV"]
     if not membros_empresas or not membros_socios:
-        raise RuntimeError("Faltam arquivos de EMPRECSV ou SOCIOCSV em dados/raw/receita — "
+        raise RuntimeError("Faltam arquivos de EMPRECSV ou SOCIOCSV em dados/raw/receita, "
                             "rodem baixar_receita.py sem --filtro antes.")
 
     primeiro = membros_empresas[0]
@@ -118,10 +118,10 @@ def rodar_teste(empresas: pd.DataFrame, socios: pd.DataFrame, engine) -> pd.Data
     log.info("Postgres: %.4fs -> %d linhas", t_postgres, len(resultado_sql))
 
     if len(resultado_pandas) != len(resultado_sql):
-        log.warning("Pandas (%d linhas) e Postgres (%d linhas) discordam — investiguem antes de concluir.",
+        log.warning("Pandas (%d linhas) e Postgres (%d linhas) discordam, investiguem antes de concluir.",
                     len(resultado_pandas), len(resultado_sql))
     else:
-        log.info("OK — os dois métodos concordam no número de linhas do resultado.")
+        log.info("OK, os dois métodos concordam no número de linhas do resultado.")
 
     with engine.begin() as conn:
         conn.execute(text("DROP TABLE IF EXISTS teste_empresas, teste_socios"))
@@ -159,7 +159,7 @@ def main(argv=None):
 
     log.info(
         "Nota pra conclusão: em amostra pequena/média é NORMAL o Pandas ganhar do Postgres numa "
-        "junção isolada (overhead de rede/planejamento). Não invalida a escolha do banco -- o "
+        "junção isolada (overhead de rede/planejamento). Não invalida a escolha do banco, o "
         "argumento real é que a base inteira não cabe em memória, o dashboard repete a mesma "
         "consulta pra usuários diferentes, e só o banco garante integridade referencial e concorrência."
     )

@@ -2,7 +2,7 @@
 -- =====================================================================
 -- Tabela unica, desnormalizada. Medido, ela ocuparia cerca de 1,9 GB
 -- entre dados e indices para os 2.023.236 contratos do recorte, contra um
--- orcamento utilizavel de 500 a 700 MB no plano gratuito da Aiven -- e o
+-- orcamento utilizavel de 500 a 700 MB no plano gratuito da Aiven, e o
 -- limite de 1 GB de la e o DISCO do servico, nao a soma das tabelas.
 --
 -- O substituto e o schema_estrela.sql, que normaliza em modelo estrela e
@@ -125,7 +125,7 @@ CREATE INDEX IF NOT EXISTS ix_contratos_uf_data
     ON contratos (uf_sigla, data_publicacao);
 
 -- Recorte temporal. BRIN em vez de btree: a carga vai mes a mes, entao a
--- tabela ja fica quase ordenada por data_publicacao -- e nesse caso o BRIN
+-- tabela ja fica quase ordenada por data_publicacao, e nesse caso o BRIN
 -- ocupa alguns KB contra dezenas de MB de um btree, com filtro por periodo
 -- igualmente eficiente.
 CREATE INDEX IF NOT EXISTS ix_contratos_data_publicacao_brin

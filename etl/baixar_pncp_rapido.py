@@ -1,71 +1,18 @@
 """
-Extrator rapido de contratos do PNCP.
-=====================================================================
-Mesma fonte do baixar_pncp.py, mas trocando a estrategia de varredura.
-NAO substitui o baixar_pncp.py nem mexe nos arquivos que ele gerou
-(contratos_2025.jsonl / contratos_2025.checkpoint continuam intactos).
+Extrator de contratos do PNCP.
 
-Por que o original demora
--------------------------
-Ele pagina o ano inteiro de uma vez: 2.023.236 contratos / 100 por
-pagina = 20.233 requisicoes. Pior, a API do PNCP pagina por
-deslocamento, entao o custo cresce com o numero da pagina. Medido:
+Varre o periodo em janelas de um dia e grava um JSONL unico, acrescentando
+linhas. O arquivo .dias ao lado lista os dias ja fechados, entao rodar de
+novo retoma de onde parou. A API limita por requisicoes por minuto, nao por
+concorrencia, e o intervalo entre chamadas e o que controla isso.
 
-    pagina 1     (tamanhoPagina=500) ->  12 s
-    pagina 4000  (tamanhoPagina=500) ->  52 s
+Saida: dados/raw/pncp/contratos_<ano>_completo.jsonl e o .dias correspondente.
 
-Ou seja, quanto mais o download avanca, mais lento ele fica. Nesse
-ritmo a varredura completa nao termina em tempo util.
-
-O que este script faz diferente
--------------------------------
-1. Quebra o periodo em janelas de 1 dia. Cada dia tem ~5.500 contratos
-   = no maximo ~18 paginas, entao TODA requisicao e uma pagina rasa
-   (~2 s) e o custo por pagina para de crescer.
-2. Baixa varios dias em paralelo, reaproveitando conexao.
-3. Controla o RITMO com uma porta global: um intervalo minimo entre duas
-   requisicoes quaisquer, valendo para todas as threads juntas.
-4. Grava tudo num arquivo unico, so acrescentando linhas.
-
-Sobre o 429 -- medido em 19/09/2026
------------------------------------
-Ritmo sustentado, 18 requisicoes por degrau:
-
-    ~20 req/min  ->  0 em 429
-     40 req/min  -> 13 em 429
-     62 req/min  -> 10 em 429
-     79 req/min  -> 13 em 429   <- 1 thread so!
-
-O limite e de REQUISICOES POR TEMPO e fica entre 20 e 40 req/min. Nao e a
-concorrencia: 1 thread a 79 req/min falha tanto quanto 3 threads a 62.
-
-Consequencia contra-intuitiva: reduzir o tamanho da pagina PIORA, porque
-gasta mais requisicoes para os mesmos dados.
-
-    tamanhoPagina=500 -> 1,6 s por requisicao -> 312 reg/s
-    tamanhoPagina=100 -> 0,85 s               -> 118 reg/s
-
-Pagina de 100 precisa de 5x mais requisicoes, batendo no limite 5x mais
-rapido. Numa rodada real com a escada ligada, a pagina desceu ate 100 e a
-vazao caiu para 2 reg/s -- pior que o extrator original.
-
-Por isso a escada existe mas fica DESLIGADA por padrao (--escada liga).
-O controle certo e o --intervalo.
-
-Saida: dados/raw/pncp/contratos_2025_completo.jsonl   (um contrato por linha)
-       dados/raw/pncp/contratos_2025_completo.dias    (dias ja concluidos)
-
-Retomada: o arquivo .dias lista os dias que fecharam. Rodar de novo pula
-esses dias e continua acrescentando no mesmo .jsonl. Se o processo morrer
-entre gravar o dia e marcar o dia, aquele dia volta na proxima rodada e
-gera linhas repetidas -- o tratar_contratos.py deduplica por
-numeroControlePNCP, entao isso nao contamina a analise.
-
-Uso (rodar de dentro de etl/):
+Uso:
     python baixar_pncp_rapido.py
-    python baixar_pncp_rapido.py --intervalo 3.0    # ainda mais devagar
-    python baixar_pncp_rapido.py --de 20250101 --ate 20250107   # teste curto
-    python baixar_pncp_rapido.py --verificar                    # so confere
+    python baixar_pncp_rapido.py --intervalo 3.0
+    python baixar_pncp_rapido.py --de 20250101 --ate 20250107
+    python baixar_pncp_rapido.py --verificar
 """
 
 import argparse
@@ -88,7 +35,7 @@ TIMEOUT_SEGUNDOS = 120
 MAX_TENTATIVAS = 6
 STATUS_RETENTAVEIS = {429, 500, 502, 503, 504}
 
-# Os workers nao regulam o ritmo -- quem regula e a PortaRitmo. Eles so
+# Os workers nao regulam o ritmo, quem regula e a PortaRitmo. Eles so
 # servem para esconder latencia: enquanto um espera a resposta (1,6-2,8 s),
 # outro ja pode pedir a vez na porta.
 WORKERS_PADRAO = 2
@@ -99,7 +46,7 @@ WORKERS_PADRAO = 2
 #      62 req/min -> 10 de 18
 #      79 req/min -> 13 de 18   (1 thread! a concorrencia nao e o gatilho)
 # O limite fica entre 20 e 40 req/min. 2,0 s da 30 req/min de alvo, mas a
-# latencia das respostas puxa o ritmo efetivo para baixo disso -- foi a
+# latencia das respostas puxa o ritmo efetivo para baixo disso, foi a
 # configuracao que passou sem nenhum 429.
 INTERVALO_PADRAO = 2.0     # segundos entre duas requisicoes quaisquer
 
@@ -113,7 +60,7 @@ class TamanhoPagina:
     """Escada global de tamanho de pagina: 500 -> 450 -> ... -> 100.
 
     So desce, nunca sobe. Se a API apertou uma vez, subir de novo so
-    provocaria o proximo 429 -- melhor assentar no tamanho que passa.
+    provocaria o proximo 429, melhor assentar no tamanho que passa.
 
     Importante: o tamanho NAO pode mudar no meio de um dia. As fronteiras
     de paginacao sao calculadas a partir dele, entao trocar no meio faria
@@ -151,8 +98,8 @@ class PortaRitmo:
 
     Medido em 19/09/2026: requisicoes unicas espacadas 5 s passaram 5/5 sem
     nenhum 429, enquanto 2 workers disparando a toda tomaram 429 em quase
-    toda pagina. O limite do PNCP e de RITMO -- requisicoes por unidade de
-    tempo -- e nao de tamanho de resposta nem de numero de conexoes. Entao
+    toda pagina. O limite do PNCP e de RITMO, requisicoes por unidade de
+    tempo, e nao de tamanho de resposta nem de numero de conexoes. Entao
     quem regula tem que ser o intervalo entre requisicoes, nao a pausa de
     cada thread: com pausa por thread, N threads fazem N vezes o ritmo.
 
@@ -432,7 +379,7 @@ def verificar(caminho: Path, de: str, ate: str) -> int:
     print(f"  duplicados      : {duplicados}"
           + ("  (o tratamento remove)" if duplicados else ""))
     if invalidas:
-        print(f"  ATENCAO: {invalidas} linha(s) invalida(s) -- possivel queda "
+        print(f"  ATENCAO: {invalidas} linha(s) invalida(s), possivel queda "
               f"no meio de uma gravacao")
     return 0 if not faltando else 1
 
@@ -456,7 +403,7 @@ def main() -> int:
     p.add_argument("--escada", action="store_true",
                    help=f"reduz a pagina de {TAMANHO_PASSO} em {TAMANHO_PASSO} "
                         f"a cada 429, ate {TAMANHO_MINIMO}. DESLIGADO por "
-                        f"padrao: medimos que piora -- pagina menor exige mais "
+                        f"padrao: medimos que piora, pagina menor exige mais "
                         f"requisicoes para os mesmos dados, e o limite do PNCP "
                         f"e de requisicoes por tempo, nao de tamanho.")
     p.add_argument("--saida", default=None,
@@ -514,7 +461,7 @@ def main() -> int:
                 except Exception as e:
                     falhas.append((dia.isoformat(), repr(e)))
                     print(f"  [{concluidos_agora}/{len(pendentes)}] "
-                          f"{dia.isoformat()}: FALHOU -- {e}", flush=True)
+                          f"{dia.isoformat()}: FALHOU, {e}", flush=True)
                     continue
 
                 total_registros += gravados
@@ -538,7 +485,7 @@ def main() -> int:
                    f"(final {tamanhos.atual})")
     print(resumo)
     if falhas:
-        print(f"   {len(falhas)} dia(s) falharam -- rode de novo para refazer "
+        print(f"   {len(falhas)} dia(s) falharam, rode de novo para refazer "
               f"so eles:")
         for rotulo, erro in falhas[:10]:
             print(f"     {rotulo}: {erro}")

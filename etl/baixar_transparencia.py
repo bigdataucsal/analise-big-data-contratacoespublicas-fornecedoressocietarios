@@ -48,12 +48,12 @@ def buscar_pagina(pagina: int, codigo_orgao: str = None) -> list:
         )
     if resp.status_code == 400:
         raise RuntimeError(
-            "400 Bad Request -- provavel causa: este endpoint pode EXIGIR "
+            "400 Bad Request, provavel causa: este endpoint pode EXIGIR "
             "codigoOrgao junto com as datas (diferente do PNCP, que aceita "
             "so o periodo). Confiram no Swagger: "
             "https://api.portaldatransparencia.gov.br/swagger-ui.html "
             "e, se for o caso, preencham ORGAOS_RECORTE em config.py com a "
-            "lista de codigos de orgao (nao CNPJ -- e um codigo SIAFI/SIORG "
+            "lista de codigos de orgao (nao CNPJ, e um codigo SIAFI/SIORG "
             "diferente, ver /orgaos-siafi na mesma API)."
         )
     resp.raise_for_status()
@@ -74,7 +74,7 @@ def main():
 
     # Se ORGAOS_RECORTE estiver vazio, tentamos sem filtro de orgao primeiro.
     # Se a API responder 400 (ver mensagem de erro acima), preencham
-    # ORGAOS_RECORTE em config.py e rodem de novo -- o loop abaixo passa a
+    # ORGAOS_RECORTE em config.py e rodem de novo, o loop abaixo passa a
     # varrer 1 orgao por vez automaticamente.
     lista_orgaos = config.ORGAOS_RECORTE or [None]
 
