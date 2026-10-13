@@ -1,19 +1,4 @@
-"""
-Extrator de contratos do PNCP.
-
-Varre o periodo em janelas de um dia e grava um JSONL unico, acrescentando
-linhas. O arquivo .dias ao lado lista os dias ja fechados, entao rodar de
-novo retoma de onde parou. A API limita por requisicoes por minuto, nao por
-concorrencia, e o intervalo entre chamadas e o que controla isso.
-
-Saida: dados/raw/pncp/contratos_<ano>_completo.jsonl e o .dias correspondente.
-
-Uso:
-    python baixar_pncp_rapido.py
-    python baixar_pncp_rapido.py --intervalo 3.0
-    python baixar_pncp_rapido.py --de 20250101 --ate 20250107
-    python baixar_pncp_rapido.py --verificar
-"""
+"""Extrator de contratos do PNCP."""
 
 import argparse
 import json
@@ -35,39 +20,17 @@ TIMEOUT_SEGUNDOS = 120
 MAX_TENTATIVAS = 6
 STATUS_RETENTAVEIS = {429, 500, 502, 503, 504}
 
-# Os workers nao regulam o ritmo, quem regula e a PortaRitmo. Eles so
-# servem para esconder latencia: enquanto um espera a resposta (1,6-2,8 s),
-# outro ja pode pedir a vez na porta.
 WORKERS_PADRAO = 2
 
-# Medido em 19/09/2026, ritmo sustentado com porta global:
-#     ~20 req/min -> nenhum 429
-#      40 req/min -> 13 de 18 requisicoes em 429
-#      62 req/min -> 10 de 18
-#      79 req/min -> 13 de 18   (1 thread! a concorrencia nao e o gatilho)
-# O limite fica entre 20 e 40 req/min. 2,0 s da 30 req/min de alvo, mas a
-# latencia das respostas puxa o ritmo efetivo para baixo disso, foi a
-# configuracao que passou sem nenhum 429.
-INTERVALO_PADRAO = 2.0     # segundos entre duas requisicoes quaisquer
+INTERVALO_PADRAO = 2.0
 
-TAMANHO_INICIAL = 500      # maximo aceito pela API; 1000 responde 400
+TAMANHO_INICIAL = 500
 TAMANHO_MINIMO = 100
 TAMANHO_PASSO = 50
-MAX_REINICIOS_DIA = 3      # refaz o dia num tamanho menor ate 3 vezes
+MAX_REINICIOS_DIA = 3
 
 
 class TamanhoPagina:
-    """Escada global de tamanho de pagina: 500 -> 450 -> ... -> 100.
-
-    So desce, nunca sobe. Se a API apertou uma vez, subir de novo so
-    provocaria o proximo 429, melhor assentar no tamanho que passa.
-
-    Importante: o tamanho NAO pode mudar no meio de um dia. As fronteiras
-    de paginacao sao calculadas a partir dele, entao trocar no meio faria
-    a pagina 3 de 500 e a pagina 3 de 450 cobrirem intervalos diferentes,
-    pulando ou repetindo registros. Cada dia le o tamanho uma vez e o
-    mantem ate terminar.
-    """
 
     def __init__(self, inicial=TAMANHO_INICIAL, minimo=TAMANHO_MINIMO,
                  passo=TAMANHO_PASSO):
@@ -83,7 +46,6 @@ class TamanhoPagina:
             return self._atual
 
     def reduzir(self):
-        """Desce um degrau. Devolve (tamanho_novo, mudou)."""
         with self._lock:
             if self._atual <= self._minimo:
                 return self._atual, False
@@ -93,21 +55,8 @@ class TamanhoPagina:
 
 
 class PortaRitmo:
-    """Porta global: garante um intervalo minimo entre DUAS requisicoes
-    quaisquer, nao importa qual thread as faca.
 
-    Medido em 19/09/2026: requisicoes unicas espacadas 5 s passaram 5/5 sem
-    nenhum 429, enquanto 2 workers disparando a toda tomaram 429 em quase
-    toda pagina. O limite do PNCP e de RITMO, requisicoes por unidade de
-    tempo, e nao de tamanho de resposta nem de numero de conexoes. Entao
-    quem regula tem que ser o intervalo entre requisicoes, nao a pausa de
-    cada thread: com pausa por thread, N threads fazem N vezes o ritmo.
-
-    Os workers continuam servindo para esconder latencia (enquanto um espera
-    a resposta, outro ja pode pedir a vez), mas quem manda no ritmo e a porta.
-    """
-
-    JANELA_PENALIDADE = 5.0   # segundos: 429s dentro disso contam como um so
+    JANELA_PENALIDADE = 5.0
 
     def __init__(self, intervalo: float = 1.2, minimo: float = 0.8,
                  maximo: float = 30.0):
@@ -121,11 +70,9 @@ class PortaRitmo:
         self.total_429 = 0
 
     def aguardar(self):
-        """Bloqueia ate chegar a vez desta requisicao."""
         with self._lock:
             agora = time.monotonic()
             inicio = max(agora, self._proximo_livre)
-            # Reserva a vaga ja: a proxima thread que chegar pega a seguinte.
             self._proximo_livre = inicio + self._intervalo * random.uniform(0.9, 1.1)
             espera = inicio - agora
         if espera > 0:
@@ -135,10 +82,6 @@ class PortaRitmo:
         with self._lock:
             self.total_429 += 1
             agora = time.monotonic()
-            # Todas as threads em voo tomam 429 do mesmo aperto. Sem esta
-            # janela, um unico evento vira N multiplicacoes: foi assim que o
-            # intervalo saltou de 1,2 s para o teto de 30 s em oito passos,
-            # com 3 workers. Aqui, a rajada inteira conta como uma penalidade.
             if agora - self._ultima_penalidade < self.JANELA_PENALIDADE:
                 return self._intervalo
             self._ultima_penalidade = agora
@@ -160,13 +103,6 @@ class PortaRitmo:
 
 
 class Escritor:
-    """Arquivo unico, acrescentando linhas.
-
-    Um dia so e gravado quando esta inteiro, de uma vez, com o lock tomado:
-    assim duas threads nunca intercalam linhas e nao existe linha partida
-    pela metade. Depois do fsync dos dados e que o dia entra no .dias --
-    nessa ordem, para nunca marcar como pronto algo que nao esta em disco.
-    """
 
     def __init__(self, caminho: Path):
         self.caminho = caminho
@@ -198,14 +134,10 @@ class Escritor:
 
 
 class PaginaMenor(Exception):
-    """A API apertou: vale refazer este dia num tamanho de pagina menor."""
+    pass
 
 
 def buscar_pagina(sessao, porta, tamanhos, dia: str, pagina: int, tamanho: int):
-    """Uma pagina de um dia, no tamanho fixado para aquele dia.
-
-    Devolve o dict da API, ou None se a pagina nao existe (a API responde
-    400, nao vazio, quando pagina > total)."""
     params = {
         "dataInicial": dia,
         "dataFinal": dia,
@@ -226,20 +158,17 @@ def buscar_pagina(sessao, porta, tamanhos, dia: str, pagina: int, tamanho: int):
             time.sleep(min(2 ** tentativa, 30) * random.uniform(0.8, 1.2))
             continue
 
-        if resp.status_code == 204:                 # dia sem contratos
+        if resp.status_code == 204:
             porta.premiar()
             return {"data": [], "totalPaginas": 0, "totalRegistros": 0}
 
-        if resp.status_code == 400 and pagina > 1:  # passou do fim do dia
+        if resp.status_code == 400 and pagina > 1:
             return None
 
         if resp.status_code in STATUS_RETENTAVEIS:
             ultimo_erro = f"HTTP {resp.status_code}"
             if resp.status_code in (429, 504):
                 novo_intervalo = porta.penalizar()
-                # A escada de tamanho, quando ligada, so afeta os dias que
-                # ainda nao comecaram. Reduzir AQUI deslocaria as fronteiras
-                # das paginas deste dia e faria pular ou repetir registros.
                 if tamanhos is not None:
                     tamanhos.reduzir()
                 print(f"    [{resp.status_code}] {dia} p{pagina} "
@@ -254,9 +183,6 @@ def buscar_pagina(sessao, porta, tamanhos, dia: str, pagina: int, tamanho: int):
         porta.premiar()
         return resp.json()
 
-    # Esgotou as tentativas nesta pagina. Se a escada estiver ligada e ja
-    # tiver descido um degrau, vale refazer o dia no tamanho novo; senao o
-    # dia falha e sai na lista do fim para ser refeito numa proxima rodada.
     if tamanhos is not None and tamanhos.atual < tamanho:
         raise PaginaMenor()
     raise RuntimeError(
@@ -266,18 +192,10 @@ def buscar_pagina(sessao, porta, tamanhos, dia: str, pagina: int, tamanho: int):
 
 
 def baixar_dia(sessao, porta, tamanhos, escritor, dia: date):
-    """Baixa um dia inteiro e o grava de uma vez.
-
-    Junta tudo em memoria antes de gravar (um dia sao ~5.500 contratos,
-    ~10 MB) porque so assim da para gravar o dia inteiro sob um unico lock
-    e manter o arquivo sempre consistente.
-    """
     rotulo = dia.isoformat()
     dia_api = dia.strftime("%Y%m%d")
 
     for reinicio in range(MAX_REINICIOS_DIA + 1):
-        # Fixo do inicio ao fim deste dia. Com a escada desligada
-        # (tamanhos is None) e sempre TAMANHO_INICIAL.
         tamanho = tamanhos.atual if tamanhos is not None else TAMANHO_INICIAL
         registros = []
         try:

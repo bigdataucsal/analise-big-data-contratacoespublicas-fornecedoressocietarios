@@ -1,20 +1,4 @@
-"""
-Composicao de cor ou raca por municipio, do Censo 2022.
-
-Baixa do SIDRA a populacao residente por cor ou raca em todos os municipios e
-monta a dimensao usada no proxy territorial. O indicador descreve o territorio
-e nunca uma pessoa.
-
-Os valores vem como texto: traco significa zero e reticencias significam dado
-nao disponivel, que vira nulo.
-
-Saida: dados/proxy/cor_raca_municipio_<ano>.csv
-
-Uso:
-    python baixar_proxy_racial.py
-    python baixar_proxy_racial.py --com-sexo
-    python baixar_proxy_racial.py --ano 2010
-"""
+"""Composicao de cor ou raca por municipio, do Censo 2022."""
 
 import argparse
 import sys
@@ -31,26 +15,11 @@ CATEGORIAS = {
     "2779": "parda",
     "2780": "indigena",
 }
-TIMEOUT = 300          # sao 5.570 municipios x 5 categorias numa resposta so
+TIMEOUT = 300
 MAX_TENTATIVAS = 4
 
 
 def valor_para_int(bruto):
-    """Converte o valor do SIDRA, que vem como TEXTO com notacao propria.
-
-    Os dois casos nao sao a mesma coisa e nao podem virar o mesmo numero:
-
-        '-'    zero de verdade. No Censo 2022 aparece 1.320 vezes,
-               tipicamente nas categorias amarela e indigena de municipios
-               pequenos. Vira 0.
-        '...'  dado NAO DISPONIVEL. Aparece 30 vezes no Censo 2010 e
-               nenhuma no de 2022. Vira None, nunca 0, tratar ausencia
-               como zero inventaria populacao que o IBGE nao mediu e
-               contaminaria o percentual.
-
-    O Censo e levantamento de universo, entao aqui nao ha supressao
-    estatistica por confidencialidade como na base de nomes.
-    """
     if bruto is None:
         return None
     texto = str(bruto).strip()
@@ -87,12 +56,6 @@ def buscar(agregado: str, ano: str, classificacao: str) -> list:
 
 
 def extrair(payload: list, ano: str, com_sexo: bool) -> dict:
-    """Desmonta a resposta aninhada do SIDRA numa tabela por municipio.
-
-    A estrutura e: variavel -> resultados -> (classificacoes, series), onde
-    cada bloco de resultado corresponde a uma combinacao de categorias e
-    traz a serie de todos os municipios.
-    """
     municipios = {}
     for variavel in payload:
         for resultado in variavel.get("resultados", []):
@@ -143,8 +106,6 @@ def main() -> int:
 
     agregado = "9606" if args.com_sexo else "9605"
     cats = ",".join(CATEGORIAS)
-    # No 9606 as classificacoes sao separadas por pipe. A 287 (idade) fica
-    # fixada no total, senao voltam 134 faixas para cada municipio.
     classificacao = f"86[{cats}]|2[4,5]|287[100362]" if args.com_sexo else f"86[{cats}]"
 
     print(f"== Composicao de cor ou raca por municipio ==")
@@ -169,13 +130,8 @@ def main() -> int:
     for cod in sorted(municipios):
         r = municipios[cod]
         valores = {c: r.get(c) for c in colunas_cor}
-        # None e ausencia de medida, nao zero: se houver qualquer None, o
-        # total e o percentual ficam indefinidos em vez de errados.
         indefinido = any(v is None for v in valores.values())
         total = None if indefinido else sum(valores.values())
-        # Preta + parda = populacao negra, que e o agrupamento que o proprio
-        # IBGE usa nas analises de desigualdade racial. E a variavel que o
-        # indicador intersetorial do projeto vai consumir.
         negra = None if indefinido else sum(
             v for k, v in valores.items()
             if k.startswith("preta") or k.startswith("parda"))

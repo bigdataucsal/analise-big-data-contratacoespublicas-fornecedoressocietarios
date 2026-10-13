@@ -1,12 +1,4 @@
-"""
-perfil_veracidade.py
-Recalcula, no ano inteiro, os percentuais que o docs/5-vs.md tinha medido so na
-amostra de janeiro. Le o Parquet de contratos; nao grava nada.
-
-Uso (na pasta etl, venv ativo):
-    python perfil_veracidade.py
-    python perfil_veracidade.py --parquet "dados/parquet/contratos/*/*.parquet"
-"""
+"""perfil_veracidade.py"""
 import argparse
 
 import duckdb
@@ -26,7 +18,6 @@ def pct(cond):
 
 
 def dt(col):
-    # aceita DATE, TIMESTAMP ou texto com ou sem hora
     return f"CAST(TRY_CAST({col} AS TIMESTAMP) AS DATE)"
 
 

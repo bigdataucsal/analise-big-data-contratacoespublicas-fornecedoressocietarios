@@ -18,40 +18,20 @@ env/
 Thumbs.db
 etl/dados/benchmark/
 
-.env
 terraform.tfvars
-*.tfstate
-*.tfstate.backup
-.terraform/
 
-# --- Dados do ETL -------------------------------------------------------
-# Tudo aqui e reproduzivel a partir das APIs e dos arquivos publicos, e o
-# volume nao cabe no repositorio: so o bruto do PNCP ja passa de 100 MB e a
-# base da Receita passa de 80 GB compactada.
 *.jsonl.parcial
 *.checkpoint
-# .dias e o estado de retomada do extrator do PNCP (dias concluidos).
 *.dias
 
-# Arvores de dado, por fonte. A "dados/" sem barra inicial casa em qualquer
-# profundidade, entao cobre tanto etl/dados/raw/ quanto uma arvore paralela.
 etl/dados/saida_postgres/
-etl/dados/benchmark/
 etl/dados/cache/
 etl/dados/genero/
 etl/dados/proxy/
 **/dados/raw/
 
-# A barra inicial ancora na raiz: e a arvore que aparece quando alguem roda
-# um script da raiz do repo em vez de dentro de etl/.
 /dados/
 
-# --- Excecao: inventario e parquet filtrado da Receita tambem sao versionados
-# São o entregável da S1 (inventário) e a evidência de que o filtro rodou
-# contra a lista de CNPJs (parquet), não dado bruto reproduzível sem custo —
-# o bruto (dados/raw/) continua fora. Mesma lógica do recorte/ acima: o git
-# não reinclui arquivo cujo diretório pai foi excluído, por isso a pasta
-# precisa ser negada explicitamente antes do arquivo.
 !etl/inventario/
 !etl/inventario/*.csv
 
@@ -60,14 +40,10 @@ etl/dados/proxy/
 !etl/dados/parquet/receita/*.parquet
 !etl/dados/parquet/receita/_manifesto.json
 
-# dados gerados e artefatos de verifica��o
 etl/dados/parquet/
 etl/dados/auditoria_*.csv
 etl/dias_incompletos.txt
 etl/verificacao_pncp.csv
 
-*.tfstate.backup
-.terraform/
 etl/dados/recorte/cnpjs_*
-etl/dados/recorte/orgaos_recorte.csv
 etl/dados/recorte/orgaos_recorte.csv

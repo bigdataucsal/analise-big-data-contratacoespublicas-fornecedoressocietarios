@@ -1,8 +1,4 @@
-"""
-Teste comparativo S2: a mesma junção (empresas x sócios) rodada em Pandas sobre CSV e em
-PostgreSQL (Aiven), com os dois tempos cronometrados. É o que transforma a escolha do banco
-em evidência.
-"""
+"""Teste comparativo S2: a mesma junção (empresas x sócios) rodada em Pandas sobre CSV e em"""
 from __future__ import annotations
 
 import argparse
@@ -32,7 +28,6 @@ REPO_ROOT = BASE_DIR.parent
 INVENTORY_DIR = REPO_ROOT / cfg.DIR_INVENTARIO
 INVENTORY_DIR.mkdir(parents=True, exist_ok=True)
 
-# Conexão
 
 def montar_conexao() -> str:
     uri = os.getenv("AIVEN_SERVICE_URI")
@@ -52,9 +47,6 @@ def montar_conexao() -> str:
         )
     return f"postgresql+psycopg2://{user}:{password}@{host}:{port}/{dbname}?sslmode=require"
 
-
-
-# Amostra real: empresas de um shard + sócios filtrados em chunks em todos os shards
 
 def montar_amostra(n_empresas: int) -> tuple[pd.DataFrame, pd.DataFrame]:
     membros = listar_membros_zip(RAW_DIR)
@@ -85,10 +77,8 @@ def montar_amostra(n_empresas: int) -> tuple[pd.DataFrame, pd.DataFrame]:
     log.info("%d sócios encontrados pra essas empresas (varrendo todos os shards de sócios)", len(socios))
     return empresas, socios
 
-# O teste em si
 
 def rodar_teste(empresas: pd.DataFrame, socios: pd.DataFrame, engine) -> pd.DataFrame:
-    # 1. Junção em Pandas
     t0 = time.perf_counter()
     resultado_pandas = empresas.merge(socios, on="cnpj_basico", how="inner")
     t_pandas = time.perf_counter() - t0
@@ -136,7 +126,6 @@ def rodar_teste(empresas: pd.DataFrame, socios: pd.DataFrame, engine) -> pd.Data
          "tempo_segundos": round(t_postgres, 4)},
     ])
 
-# CLI
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)

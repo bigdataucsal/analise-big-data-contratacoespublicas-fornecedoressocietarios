@@ -1,18 +1,4 @@
-"""
-Extrator de contratos do PNCP (API publica, sem autenticacao).
-==================================================================
-Le o recorte de config.py, NAO troquem as datas aqui, troquem la.
-
-Uso (rodar de dentro de etl/):
-    python baixar_pncp.py
-
-Gera: dados/raw/pncp/contratos_2025.jsonl (um contrato JSON por linha)
-      dados/raw/pncp/contratos_2025.checkpoint (pagina onde parou)
-
-Se cair no meio (timeout, queda de conexao), rodem o mesmo comando de novo:
-ele retoma da pagina seguinte a ultima concluida, sem duplicar nem
-sobrescrever o que ja foi baixado.
-"""
+"""Extrator de contratos do PNCP (API publica, sem autenticacao)."""
 
 import json
 import time
@@ -23,8 +9,7 @@ import requests
 import config
 
 BASE_URL = "https://pncp.gov.br/api/consulta/v1/contratos"
-TAMANHO_PAGINA = 100  # reduzido de 500, paginas menores respondem mais rapido
-                       # e caem menos em 504 no servidor do PNCP
+TAMANHO_PAGINA = 100
 TIMEOUT_SEGUNDOS = 90
 MAX_TENTATIVAS = 5
 STATUS_RETENTAVEIS = {429, 500, 502, 503, 504}
@@ -37,11 +22,8 @@ def buscar_pagina(pagina: int) -> dict:
         "pagina": pagina,
         "tamanhoPagina": TAMANHO_PAGINA,
     }
-    # Atencao: /v1/contratos NAO aceita filtro por "uf" (isso so existe em
-    # /contratacoes/publicacao). Aqui o unico filtro de recorte por orgao
-    # disponivel e por CNPJ especifico.
     if config.ORGAOS_RECORTE:
-        params["cnpjOrgao"] = config.ORGAOS_RECORTE[0]  # 1 CNPJ por chamada
+        params["cnpjOrgao"] = config.ORGAOS_RECORTE[0]
 
     ultimo_erro = None
     for tentativa in range(1, MAX_TENTATIVAS + 1):
@@ -59,7 +41,7 @@ def buscar_pagina(pagina: int) -> dict:
         except (requests.exceptions.ReadTimeout,
                 requests.exceptions.ConnectionError) as e:
             ultimo_erro = e
-            espera = 5 * tentativa  # backoff: 5s, 10s, 15s, 20s, 25s
+            espera = 5 * tentativa
             print(f"    timeout/conexao na pagina {pagina} "
                   f"(tentativa {tentativa}/{MAX_TENTATIVAS}). "
                   f"Esperando {espera}s e tentando de novo...")
@@ -99,7 +81,7 @@ def main():
               f"{config.DATA_FINAL_PNCP} ==")
 
     pagina = pagina_inicial
-    total_gravado = ultima_pagina_ok * TAMANHO_PAGINA  # estimativa p/ log
+    total_gravado = ultima_pagina_ok * TAMANHO_PAGINA
     with open(saida, modo_arquivo, encoding="utf-8") as f:
         while True:
             dados = buscar_pagina(pagina)
@@ -109,7 +91,7 @@ def main():
 
             for registro in registros:
                 f.write(json.dumps(registro, ensure_ascii=False) + "\n")
-            f.flush()  # garante que o que foi escrito nao se perde num timeout futuro
+            f.flush()
             total_gravado += len(registros)
             print(f"  pagina {pagina}: +{len(registros)} contratos "
                   f"(total {total_gravado})")
@@ -117,12 +99,12 @@ def main():
             escrever_checkpoint(checkpoint, pagina)
 
             if len(registros) < TAMANHO_PAGINA:
-                break  # ultima pagina
+                break
             pagina += 1
-            time.sleep(0.3)  # educado com a API publica
+            time.sleep(0.3)
 
     print(f"== Concluido: {total_gravado} contratos em {saida} ==")
-    checkpoint.unlink(missing_ok=True)  # terminou de verdade, checkpoint nao serve mais
+    checkpoint.unlink(missing_ok=True)
 
 
 if __name__ == "__main__":

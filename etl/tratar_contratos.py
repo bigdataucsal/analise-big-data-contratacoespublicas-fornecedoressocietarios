@@ -1,21 +1,4 @@
-"""
-Tratamento dos contratos brutos do PNCP.
-
-Le os JSONL, achata os campos aninhados, converte tipos, normaliza e deduplica
-por numeroControlePNCP, gravando duas saidas: Parquet particionado por mes,
-que e a camada analitica, e CSV por mes, que alimenta a carga no PostgreSQL.
-
-Valores monetarios vao para DECIMAL e CNPJ permanece como texto. O schema de
-leitura e declarado em vez de inferido, porque shards diferentes inferem tipos
-diferentes quando uma coluna e sempre nula.
-
-Nao escreve em dados/raw/.
-
-Uso:
-    python tratar_contratos.py
-    python tratar_contratos.py --formato parquet
-    python tratar_contratos.py --resumo
-"""
+"""Tratamento dos contratos brutos do PNCP."""
 
 import argparse
 import shutil
@@ -28,9 +11,6 @@ import duckdb
 
 import config
 
-# Schema explicito de proposito. Com inferencia automatica, um shard em que
-# orgaoSubRogado e sempre nulo infere VARCHAR enquanto outro infere STRUCT, e
-# a leitura do glob quebra. Declarar resolve e documenta o contrato do dado.
 STRUCT_ORGAO = "STRUCT(cnpj VARCHAR, razaoSocial VARCHAR, poderId VARCHAR, esferaId VARCHAR)"
 STRUCT_UNIDADE = ("STRUCT(ufNome VARCHAR, codigoUnidade VARCHAR, nomeUnidade VARCHAR, "
                   "ufSigla VARCHAR, municipioNome VARCHAR, codigoIbge VARCHAR)")
@@ -48,8 +28,6 @@ COLUNAS_BRUTO = {
     "processo": "VARCHAR",
     "objetoContrato": "VARCHAR",
     "informacaoComplementar": "VARCHAR",
-    # Datas entram como texto e sao convertidas com TRY_CAST mais adiante:
-    # uma linha com data torta vira NULL em vez de derrubar a carga inteira.
     "dataAssinatura": "VARCHAR",
     "dataVigenciaInicio": "VARCHAR",
     "dataVigenciaFim": "VARCHAR",
@@ -82,9 +60,6 @@ COLUNAS_BRUTO = {
     "unidadeSubRogada": STRUCT_UNIDADE,
 }
 
-# SELECT do tratamento. Nomes em snake_case porque o Postgres rebaixa
-# identificador nao aspeado para minusculo, manter camelCase obrigaria a
-# aspear cada coluna em toda consulta no Aiven.
 SQL_TRATAMENTO = """
 WITH bruto AS (
     SELECT * FROM read_json([{fontes}], format='newline_delimited',
@@ -194,13 +169,6 @@ def montar_sql(fontes) -> str:
 
 
 def descobrir_fontes(raw_dir: Path) -> list:
-    """Todo JSONL bruto do PNCP que existir.
-
-    Entram os tres formatos que o projeto ja produziu, o arquivo unico do
-    extrator rapido, os shards diarios da versao anterior dele (se alguem
-    ainda tiver) e o arquivo do extrator original. Todos juntos, porque a
-    deduplicacao por numeroControlePNCP resolve a sobreposicao entre eles.
-    """
     pncp = raw_dir / "pncp"
     fontes = []
 
@@ -223,16 +191,13 @@ def preparar_conexao(threads: int, memoria: str) -> duckdb.DuckDBPyConnection:
     con = duckdb.connect()
     con.execute(f"SET threads = {threads}")
     con.execute(f"SET memory_limit = '{memoria}'")
-    # Sem a ordem de insercao preservada o DuckDB escreve os Parquet em
-    # paralelo e usa bem menos memoria. A ordem das linhas nao importa aqui:
-    # quem consome filtra e agrega.
     con.execute("SET preserve_insertion_order = false")
     return con
 
 
 def gravar_parquet(con, sql: str, destino: Path) -> None:
     if destino.exists():
-        shutil.rmtree(destino)          # particionamento e reescrito inteiro
+        shutil.rmtree(destino)
     destino.mkdir(parents=True, exist_ok=True)
     caminho = str(destino).replace("\\", "/")
     con.execute(f"""
@@ -243,18 +208,10 @@ def gravar_parquet(con, sql: str, destino: Path) -> None:
 
 
 def gravar_csv_postgres(con, sql: str, destino: Path) -> None:
-    """CSV pronto para COPY no Aiven.
-
-    NULL vai como string vazia, que e o padrao que o COPY ... CSV do Postgres
-    entende sem parametro extra. Um CSV por mes: se a carga cair no meio,
-    voces refazem so o mes que faltou.
-    """
     if destino.exists():
         shutil.rmtree(destino)
     destino.mkdir(parents=True, exist_ok=True)
     caminho = str(destino).replace("\\", "/")
-    # ano_mes sai do corpo do CSV (vira nome de pasta) para o arquivo bater
-    # coluna a coluna com a tabela do schema_postgres.sql.
     con.execute(f"""
         COPY (SELECT * FROM ({sql})) TO '{caminho}'
         (FORMAT CSV, HEADER, DELIMITER ',', QUOTE '"', ESCAPE '"', NULL '',
@@ -264,11 +221,6 @@ def gravar_csv_postgres(con, sql: str, destino: Path) -> None:
 
 
 def fmt_br(valor, casas: int = 0) -> str:
-    """Numero no padrao brasileiro: 12.739.091.038,69.
-
-    Um replace(',', '.') sozinho nao serve, trocaria tambem o separador
-    decimal do format(), virando 12.739.091.038.69.
-    """
     texto = f"{valor:,.{casas}f}"
     return texto.replace(",", "\x00").replace(".", ",").replace("\x00", ".")
 

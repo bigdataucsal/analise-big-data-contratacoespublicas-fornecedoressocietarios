@@ -1,12 +1,4 @@
-"""Imprime um trecho real de cada tipo de dado do projeto, com identificadores mascarados.
-
-Uso (de dentro de etl/):
-    python exemplos_tipos.py
-    python exemplos_tipos.py --jsonl C:\\dados-bigdata\\raw\\pncp\\contratos_2025_completo.jsonl --socios-zip CAMINHO\\Socios1.zip
-
-Grava a saída em docs/evidencias/exemplos_tipos.txt. REVISE o arquivo antes de commitar:
-nomes de pessoa física e CPF são mascarados aqui, mas confira com os seus olhos.
-"""
+"""Imprime um trecho real de cada tipo de dado do projeto, com identificadores mascarados."""
 import argparse
 import glob
 import json
@@ -21,7 +13,6 @@ JSONL_PADRAO = r"C:\dados-bigdata\raw\pncp\contratos_2025_completo.jsonl"
 
 
 def mascarar_nome(nome: str) -> str:
-    """MARIA DA SILVA SANTOS -> MARIA D. S. S."""
     partes = nome.split()
     if not partes:
         return ""
@@ -29,7 +20,6 @@ def mascarar_nome(nome: str) -> str:
 
 
 def _chave(reg: dict, alvo: str):
-    """Acha a chave ignorando maiúsculas e sublinhado (camelCase ou snake_case)."""
     alvo = alvo.lower().replace("_", "")
     for k in reg:
         if k.lower().replace("_", "") == alvo:
@@ -38,12 +28,10 @@ def _chave(reg: dict, alvo: str):
 
 
 def _chave_tipo(reg: dict):
-    """No JSON real do PNCP a chave é 'tipoPessoa'; o roteiro cita 'tipoPessoaFornecedor'."""
     return _chave(reg, "tipoPessoaFornecedor") or _chave(reg, "tipoPessoa")
 
 
 def exemplo_json(caminho: str):
-    """Primeiro contrato de fornecedor PJ; se não houver, o primeiro registro. Mascara nome e CPF."""
     primeiro = None
     escolhido = None
     with open(caminho, encoding="utf-8") as f:
@@ -66,7 +54,6 @@ def exemplo_json(caminho: str):
     k_nome = _chave(reg, "nomeRazaoSocialFornecedor")
     k_ni = _chave(reg, "niFornecedor")
     nome = (reg.get(k_nome) or "") if k_nome else ""
-    # Pessoa física, ou razão social de empresário individual (traz CPF): mascarar.
     if k_nome and (not eh_pj or re.search(r"\d{8,}", nome)):
         reg[k_nome] = mascarar_nome(re.sub(r"\d+", "", nome))
     if k_ni and not eh_pj:
@@ -75,7 +62,6 @@ def exemplo_json(caminho: str):
 
 
 def exemplo_socios(caminho_zip: str, n: int = 3):
-    """Primeiras linhas do arquivo de sócios (sem cabeçalho, ; e latin-1), mascaradas."""
     with zipfile.ZipFile(caminho_zip) as z:
         with z.open(z.namelist()[0]) as f:
             linhas = [f.readline().decode("latin-1").rstrip("\r\n") for _ in range(n)]
@@ -83,15 +69,14 @@ def exemplo_socios(caminho_zip: str, n: int = 3):
     for linha in linhas:
         c = [x.strip('"') for x in linha.split(";")]
         if len(c) >= 11:
-            c[0] = c[0][:2] + "******"          # raiz do CNPJ
-            c[2] = mascarar_nome(c[2])          # nome do sócio
-            c[3] = re.sub(r"\d", "X", c[3])     # máscara do CPF
+            c[0] = c[0][:2] + "******"
+            c[2] = mascarar_nome(c[2])
+            c[3] = re.sub(r"\d", "X", c[3])
         saida.append(";".join(f'"{x}"' for x in c))
     return saida
 
 
 def exemplos_objeto(caminho: str, k: int = 3, passo: int = 500):
-    """k textos de objeto de contrato, de pontos espalhados pelo arquivo."""
     candidatos = []
     with open(caminho, encoding="utf-8") as f:
         for i, linha in enumerate(f):

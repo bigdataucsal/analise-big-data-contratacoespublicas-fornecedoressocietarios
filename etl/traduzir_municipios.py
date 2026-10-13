@@ -1,20 +1,4 @@
-"""
-Traduz o codigo de municipio da Receita Federal para o codigo do IBGE.
-
-A tabela de dominio da Receita traz so codigo e descricao, sem o codigo do
-IBGE, que e o que o PNCP e o SIDRA usam. O casamento e por nome normalizado,
-desambiguado pela UF que o arquivo de estabelecimentos traz na mesma linha.
-
-Na normalizacao o apostrofo e apagado e nao vira espaco: o IBGE escreve
-"Alta Floresta D'Oeste" e a Receita "ALTA FLORESTA DOESTE".
-
-Entrada: dados/proxy/cor_raca_municipio_2022.csv e dados/raw/receita/*.zip
-Saida:   dados/proxy/municipios_receita_ibge.csv
-
-Uso:
-    python traduzir_municipios.py
-    python traduzir_municipios.py --so-conferir
-"""
+"""Traduz o codigo de municipio da Receita Federal para o codigo do IBGE."""
 
 import argparse
 import re
@@ -31,19 +15,6 @@ SAIDA = Path(config.DIR_DADOS_PARQUET).parent / "proxy" / "municipios_receita_ib
 
 
 def normalizar(nome: str) -> str:
-    """Forma canônica para comparar nomes de município.
-
-    Sem acento, sem caixa, sem pontuação, sem espaço duplo. É onde as grafias
-    da Receita e do IBGE divergem sem divergir de verdade.
-
-    O apóstrofo é APAGADO, não trocado por espaço, e essa distinção não é
-    detalhe: o IBGE escreve "Alta Floresta D'Oeste" e a Receita escreve
-    "ALTA FLORESTA DOESTE". Trocando por espaço sairia "D OESTE" de um lado e
-    "DOESTE" do outro, e os dois não casariam. Brasil tem dezenas de
-    municípios assim, os "d'Oeste", "d'Água" e "D'Ávila", então o erro
-    derrubaria uma faixa inteira. O hífen, ao contrário, vira espaço, porque
-    é assim que a divergência aparece: "Mogi Mirim" contra "MOGI-MIRIM".
-    """
     if not nome:
         return ""
     sem_acento = unicodedata.normalize("NFKD", str(nome))
@@ -54,12 +25,6 @@ def normalizar(nome: str) -> str:
 
 
 def carregar_ibge() -> dict:
-    """Lado IBGE: (nome normalizado, UF) -> código IBGE.
-
-    Vem do arquivo do Censo que o baixar_proxy_racial.py já produz, onde o
-    município aparece como "Alta Floresta D'Oeste - RO". Evita uma chamada de
-    API só para pegar uma lista que já está em disco.
-    """
     if not ARQUIVO_IBGE.is_file():
         raise SystemExit(
             f"ERRO: {ARQUIVO_IBGE} não existe.\n"
@@ -83,12 +48,6 @@ def carregar_ibge() -> dict:
 
 
 def carregar_receita():
-    """Lado Receita: código -> nome, e código -> conjunto de UFs onde ocorre.
-
-    O nome sai do MUNICCSV. As UFs saem do arquivo de estabelecimentos, que
-    é onde UF e código de município convivem na mesma linha. Sem esse segundo
-    passo o casamento por nome fica ambíguo entre estados.
-    """
     import pandas as pd
 
     zips = sorted(DIR_RECEITA.glob("*.zip"))
@@ -150,15 +109,12 @@ def main() -> int:
     print(f"   lado Receita: {len(nomes)} códigos no MUNICCSV, "
           f"{len(ufs)} com UF observada nos estabelecimentos")
 
-    # --- casamento ---
     pares, sem_uf, sem_par, ambiguos = [], [], [], []
     for codigo, nome in sorted(nomes.items()):
         alvo = normalizar(nome)
         candidatas = ufs.get(codigo, set())
 
         if not candidatas:
-            # Código que não aparece em nenhum estabelecimento do recorte.
-            # Não é erro: simplesmente não precisamos dele.
             sem_uf.append((codigo, nome))
             continue
 

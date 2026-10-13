@@ -1,15 +1,4 @@
-"""
-auditar_extremos.py
-Audita os contratos de valor extremo do Parquet de contratos PNCP.
-Nao altera o Parquet. Grava um CSV local para revisao manual.
-
-Uso (na pasta etl, venv ativo):
-    python auditar_extremos.py
-    python auditar_extremos.py --limite 1e9
-
-O CSV sai em dados/auditoria_valores_extremos.csv. Tem razao social de fornecedor PJ
-e o texto do objeto: e material de trabalho, NAO commitar (confira o .gitignore).
-"""
+"""auditar_extremos.py"""
 import argparse
 import os
 
@@ -43,8 +32,6 @@ print(con.sql(f"""
     ORDER BY c.corte
 """).df().to_string())
 
-# ATENCAO: os aliases de texto tem nome diferente da coluna, para o ORDER BY
-# ordenar pelo numero e nao pelo texto formatado.
 print("\n== 30 maiores contratos, com orgao e objeto ==")
 print(con.sql(f"""
     SELECT printf('%.2f', valor_global) AS valor_txt,

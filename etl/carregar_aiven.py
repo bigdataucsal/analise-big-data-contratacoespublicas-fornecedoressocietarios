@@ -1,23 +1,4 @@
-"""
-Carga dos contratos tratados no PostgreSQL da Aiven.
-
-Le os CSV gerados pelo tratar_contratos.py e carrega via COPY. Os indices sao
-criados depois da carga. O modo substituir faz TRUNCATE antes; o incremental
-usa staging e upsert, e e idempotente.
-
-Aponta para o schema_postgres.sql, de tabela unica. O modelo estrela aprovado
-esta em schema_estrela.sql e a carga para ele ainda nao foi escrita.
-
-Pre-requisitos:
-    pip install "psycopg[binary]" python-dotenv
-    python tratar_contratos.py
-    AIVEN_PG_URI no .env
-
-Uso:
-    python carregar_aiven.py --simular
-    python carregar_aiven.py
-    python carregar_aiven.py --modo incremental
-"""
+"""Carga dos contratos tratados no PostgreSQL da Aiven."""
 
 import argparse
 import os
@@ -28,8 +9,6 @@ from pathlib import Path
 DIR_CSV_PADRAO = Path("dados/saida_postgres/contratos")
 TABELA = "contratos"
 
-# Precisa bater, em ordem, com o cabecalho do CSV e com as colunas 1-49 do
-# schema_postgres.sql. ano_mes fica de fora: e coluna gerada no Postgres.
 COLUNAS = [
     "numero_controle_pncp", "numero_controle_compra", "numero_controle_ata",
     "ano_contrato", "sequencial_contrato", "numero_contrato_empenho", "processo",
@@ -55,8 +34,6 @@ def fmt_br(valor, casas: int = 0) -> str:
 
 
 def listar_csvs(dir_csv: Path) -> list:
-    """CSV em ordem de mes, para a tabela ficar quase ordenada por
-    data_publicacao, e o que faz o indice BRIN do schema valer a pena."""
     return sorted(dir_csv.rglob("*.csv"), key=lambda p: (p.parent.name, p.name))
 
 
@@ -78,8 +55,6 @@ def conferir_cabecalho(caminho: Path) -> None:
 
 def sql_copy(tabela: str) -> str:
     colunas = ", ".join(COLUNAS)
-    # NULL '' porque o DuckDB grava nulo como campo vazio. HEADER MATCH nao
-    # serve: a lista explicita e o que garante a posicao correta.
     return (f"COPY {tabela} ({colunas}) FROM STDIN "
             f"WITH (FORMAT CSV, HEADER, NULL '')")
 
@@ -92,10 +67,8 @@ def carregar(uri: str, dir_csv: Path, modo: str, criar_indices: bool) -> int:
 
     with psycopg.connect(uri, autocommit=False) as con:
         with con.cursor() as cur:
-            # Numa carga em lote nao ha o que perder esperando o fsync de
-            # cada commit: se cair no meio, o remedio e refazer a carga.
             cur.execute("SET synchronous_commit = off")
-            cur.execute("SET maintenance_work_mem = '512MB'")  # p/ os indices
+            cur.execute("SET maintenance_work_mem = '512MB'")
 
             print("-- criando tabela (se nao existir)")
             ddl = Path("schema_postgres.sql").read_text(encoding="utf-8")
@@ -104,10 +77,6 @@ def carregar(uri: str, dir_csv: Path, modo: str, criar_indices: bool) -> int:
             con.commit()
 
             if modo == "substituir":
-                # Derruba os indices de uma execucao anterior antes do COPY.
-                # Sem isso, a promessa de "indices so no fim" valeria apenas
-                # na primeira carga, da segunda em diante o COPY entraria
-                # com as arvores todas montadas.
                 print(f"-- removendo indices anteriores")
                 cur.execute("""
                     SELECT indexname FROM pg_indexes
@@ -124,8 +93,6 @@ def carregar(uri: str, dir_csv: Path, modo: str, criar_indices: bool) -> int:
                 destino = f"{TABELA}_stg"
                 print(f"-- staging UNLOGGED {destino}")
                 cur.execute(f"DROP TABLE IF EXISTS {destino}")
-                # UNLOGGED: a staging nao precisa sobreviver a queda do
-                # servidor, entao pular o WAL economiza metade da escrita.
                 cur.execute(f"CREATE UNLOGGED TABLE {destino} "
                             f"(LIKE {TABELA} INCLUDING DEFAULTS "
                             f" EXCLUDING CONSTRAINTS EXCLUDING INDEXES)")
@@ -138,7 +105,7 @@ def carregar(uri: str, dir_csv: Path, modo: str, criar_indices: bool) -> int:
                 t = time.time()
                 with open(caminho, "r", encoding="utf-8", newline="") as f:
                     with cur.copy(sql_copy(destino)) as copia:
-                        while bloco := f.read(1 << 20):   # 1 MB por vez
+                        while bloco := f.read(1 << 20):
                             copia.write(bloco)
                 con.commit()
                 linhas = cur.rowcount if cur.rowcount and cur.rowcount > 0 else 0
@@ -175,10 +142,6 @@ def carregar(uri: str, dir_csv: Path, modo: str, criar_indices: bool) -> int:
                         cur.execute(comando)
                         con.commit()
                     except Exception as e:
-                        # O pg_trgm e o indice que depende dele sao os unicos
-                        # que exigem permissao de extensao. Se o papel do
-                        # Aiven nao tiver, o resto da carga ja esta no lugar
-                        # e nao faz sentido derrubar tudo por causa disso.
                         con.rollback()
                         resumo = " ".join(comando.split())[:70]
                         print(f"   AVISO: falhou e foi ignorado -> {resumo}...")
@@ -208,7 +171,7 @@ def simular(dir_csv: Path) -> int:
     for caminho in arquivos:
         conferir_cabecalho(caminho)
         with open(caminho, encoding="utf-8") as f:
-            linhas = sum(1 for _ in f) - 1          # menos o cabecalho
+            linhas = sum(1 for _ in f) - 1
         tamanho = caminho.stat().st_size
         total_linhas += linhas
         total_bytes += tamanho
@@ -264,8 +227,6 @@ def main() -> int:
         return 1
 
     if "sslmode=" not in uri:
-        # O Aiven so aceita conexao TLS; sem isso a conexao e recusada e o
-        # erro que volta nao diz o motivo.
         uri += ("&" if "?" in uri else "?") + "sslmode=require"
 
     arquivos = listar_csvs(dir_csv)
@@ -273,7 +234,6 @@ def main() -> int:
         print(f"ERRO: nenhum CSV em {dir_csv}. Rode antes: python tratar_contratos.py")
         return 1
 
-    # Sem host nem usuario no log: a URI carrega a senha.
     print(f"== Carga no Aiven for PostgreSQL ==")
     print(f"   modo   : {args.modo}")
     print(f"   origem : {dir_csv} ({len(arquivos)} arquivo(s))")

@@ -1,6 +1,4 @@
-"""
-Extrator dos Dados Abertos de CNPJ (Receita Federal).
-"""
+"""Extrator dos Dados Abertos de CNPJ (Receita Federal)."""
 from __future__ import annotations
 
 import argparse
@@ -26,25 +24,14 @@ except ImportError:
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger("baixar_receita")
 
-# ---------------------------------------------------------------------------
-# Configuração
-# ---------------------------------------------------------------------------
 try:
     import config as cfg
 except ImportError:
     log.error("config.py não encontrado, este script precisa estar na mesma pasta que ele (etl/).")
     raise
 
-BASE_DIR = Path(__file__).resolve().parent     # etl/
+BASE_DIR = Path(__file__).resolve().parent
 
-# Convenção: cada fonte (receita/pncp/transparencia) usa sua própria subpasta dentro dos
-# diretórios compartilhados do config.py, pra não um script pisar no dado do outro.
-#
-# Os caminhos do config.py são absolutos e ancorados em etl/, então não se
-# prefixa mais com a raiz do repositório: prefixar funcionaria (o pathlib
-# descarta o lado esquerdo quando o direito é absoluto), mas daria a entender
-# que a árvore de dados fica na raiz, e era exatamente essa leitura que fazia
-# este script e os do PNCP gravarem em pastas diferentes.
 RAW_DIR = Path(cfg.DIR_DADOS_RAW) / "receita"
 PARQUET_DIR = Path(cfg.DIR_DADOS_PARQUET) / "receita"
 INVENTORY_DIR = Path(cfg.DIR_INVENTARIO)
@@ -52,18 +39,12 @@ INVENTORY_DIR = Path(cfg.DIR_INVENTARIO)
 for _dir in (RAW_DIR, INVENTORY_DIR, PARQUET_DIR):
     _dir.mkdir(parents=True, exist_ok=True)
 
-# O servidor oficial da Receita derruba conexão vinda de IP de nuvem (confirmado testando Kaggle e
-# outros runners); por isso o mirror comunitário atrás da Cloudflare vem primeiro. As pastas de
-# competência mudam de formato entre as fontes (YYYY-MM na oficial, YYYY-MM-DD no mirror), o regex
-# de descoberta aceita os dois.
 FONTES_PADRAO = [
     ("mirror (casadosdados, atrás da Cloudflare)", "https://dados-abertos-rf-cnpj.casadosdados.com.br/arquivos"),
     ("oficial (arquivos.receitafederal.gov.br)", "https://arquivos.receitafederal.gov.br/dados/cnpj/dados_abertos_cnpj"),
     ("oficial alternativa (dadosabertos.rfb.gov.br)", "https://dadosabertos.rfb.gov.br/CNPJ/dados_abertos_cnpj"),
 ]
 
-# Confiram este layout contra o PDF oficial antes de usar em produção:
-# https://www.gov.br/receitafederal/dados/cnpj-metadados.pdf  (é a Armadilha 6 do roteiro do projeto)
 LAYOUTS: dict[str, list[tuple[str, str]]] = {
     "EMPRECSV": [
         ("cnpj_basico", "texto"), ("razao_social", "texto"), ("natureza_juridica", "texto"),
@@ -110,9 +91,6 @@ def adivinhar_layout(nome_arquivo: str) -> str | None:
     return None
 
 
-# ---------------------------------------------------------------------------
-# Sessão HTTP
-# ---------------------------------------------------------------------------
 def criar_sessao() -> requests.Session:
     sessao = requests.Session()
     retries = Retry(total=4, backoff_factor=4, status_forcelist=[429, 500, 502, 503, 504])
@@ -125,9 +103,6 @@ def criar_sessao() -> requests.Session:
     return sessao
 
 
-# ---------------------------------------------------------------------------
-# Descoberta de fonte e de arquivos
-# ---------------------------------------------------------------------------
 def escolher_fonte_disponivel(sessao: requests.Session, fontes=FONTES_PADRAO, timeout=15):
     for nome, base in fontes:
         try:
@@ -136,16 +111,12 @@ def escolher_fonte_disponivel(sessao: requests.Session, fontes=FONTES_PADRAO, ti
             resp.raise_for_status()
             log.info("Fonte escolhida: %s -> %s", nome, base)
             return base, resp
-        except Exception as e:  # noqa: BLE001, queremos seguir pra próxima fonte em qualquer falha
+        except Exception as e:  # noqa: BLE001
             log.warning("  %s indisponível (%s); tentando próxima...", nome, e)
     raise RuntimeError("Nenhuma fonte de dados da Receita respondeu.")
 
 
 def listar_zips(sessao: requests.Session, base: str, resp_inicial=None, competencia: str | None = None):
-    """Descobre .zip a partir de uma base: se houver pastas YYYY-MM ou YYYY-MM-DD, entra na pedida
-    (ou na mais recente, se `competencia` não for informada); senão assume que os .zip já estão
-    listados na própria página. Devolve (urls_zip, competencia_usada), competencia_usada é None
-    quando a fonte não usa pastas por competência."""
     url_base = base if base.endswith("/") else base + "/"
     resp = resp_inicial if resp_inicial is not None else sessao.get(url_base, timeout=30)
 
@@ -169,17 +140,12 @@ def listar_zips(sessao: requests.Session, base: str, resp_inicial=None, competen
 
 
 def get_latest_folder() -> str | None:
-    """Descobre a competência mais recente disponível, sem baixar nada, nome alinhado com o
-    comentário do config.py (`cnpj-processor.get_latest_folder()`)."""
     sessao = criar_sessao()
     base, resp_inicial = escolher_fonte_disponivel(sessao)
     _, competencia = listar_zips(sessao, base, resp_inicial)
     return competencia
 
 
-# ---------------------------------------------------------------------------
-# Download resumível
-# ---------------------------------------------------------------------------
 def baixar_arquivo(sessao: requests.Session, url: str, destino: Path, timeout=60) -> Path:
     destino = Path(destino)
     modo, pos_inicial, cabecalhos = "wb", 0, {}
@@ -189,7 +155,7 @@ def baixar_arquivo(sessao: requests.Session, url: str, destino: Path, timeout=60
         modo = "ab"
     with sessao.get(url, headers=cabecalhos, stream=True, timeout=timeout) as resposta:
         if resposta.status_code == 416:
-            return destino  # já estava completo
+            return destino
         resposta.raise_for_status()
         with open(destino, modo) as f:
             for pedaco in resposta.iter_content(chunk_size=1024 * 1024):
@@ -215,9 +181,6 @@ def baixar_lista(sessao: requests.Session, urls: list[str], pasta_destino: Path)
     return pd.DataFrame(log_linhas)
 
 
-# ---------------------------------------------------------------------------
-# Leitura direto de dentro do zip (nunca extrai pro disco)
-# ---------------------------------------------------------------------------
 def listar_membros_zip(pasta_raw: Path) -> list[dict]:
     membros, avisos = [], []
     for z in sorted(pasta_raw.glob("*.zip")):
@@ -280,24 +243,7 @@ def construir_inventario(membros: list[dict], pasta_destino: Path,
     return df
 
 
-# ---------------------------------------------------------------------------
-# Fase 2: filtrar contra uma lista de CNPJs e salvar em parquet (em chunks, sem extrair)
-# ---------------------------------------------------------------------------
 def carregar_lista_cnpjs(caminho: str | Path) -> set[str]:
-    """Lê a lista de raízes de CNPJ produzida pelo recorte_cnpjs.py.
-
-    Aceita os dois formatos que ele grava: CSV com cabeçalho `cnpj_basico`
-    (cnpjs_raiz.csv) e texto puro, um por linha (cnpjs_raiz.txt). Antes, só
-    o CSV era aceito, e passar o .txt consumia a primeira raiz como nome de
-    coluna e estourava com KeyError.
-
-    E valida o comprimento, que é a guarda que importa. O quadro societário
-    da Receita é chaveado pela RAIZ de 8 dígitos (RN-01). Se alguém passar
-    cnpjs_completos.txt, que tem os CNPJ de 14, o `isin` não casa com nada:
-    o resultado é zero linhas, sem erro, sem aviso, e um parquet vazio que
-    parece download malsucedido. Falhar alto aqui custa uma mensagem e
-    elimina a categoria inteira de erro.
-    """
     caminho = Path(caminho)
     if not caminho.is_file():
         raise SystemExit(
@@ -342,10 +288,6 @@ def carregar_lista_cnpjs(caminho: str | Path) -> set[str]:
 def filtrar_para_parquet(membros: list[dict], lista_cnpjs: set[str], pasta_destino: Path,
                           competencia: str | None = None,
                           chunksize: int = 300_000) -> dict[str, Path]:
-    """Filtra cada arquivo (empresas/estabelecimentos/sócios/simples) contra `lista_cnpjs`,
-    lendo em chunks direto de dentro do zip, e salva um .parquet por layout. Tabelas de domínio
-    (CNAE, município, país...) não têm `cnpj_basico`, são copiadas inteiras, sem filtro, porque
-    são pequenas tabelas de referência usadas por qualquer linha, não por CNPJ específico."""
     pasta_destino.mkdir(parents=True, exist_ok=True)
     saidas: dict[str, list[pd.DataFrame]] = {}
     descartadas: dict[str, int] = {}
@@ -358,9 +300,6 @@ def filtrar_para_parquet(membros: list[dict], lista_cnpjs: set[str], pasta_desti
         with zipfile.ZipFile(item["zip"]) as arq, arq.open(item["membro"]) as f:
             for pedaco in pd.read_csv(f, sep=";", header=None, names=colunas, encoding="latin-1",
                                        dtype=str, chunksize=chunksize, on_bad_lines="warn", engine="python"):
-                # A Receita pode acrescentar coluna numa competência futura. Sem
-                # esta checagem, o pandas alinharia errado em silêncio e o dado
-                # sairia deslocado, o pior tipo de falha, porque não avisa.
                 if lidas == 0 and len(pedaco.columns) != len(colunas):
                     raise SystemExit(
                         f"ERRO: {item['membro']} tem {len(pedaco.columns)} colunas, "
@@ -395,24 +334,6 @@ def filtrar_para_parquet(membros: list[dict], lista_cnpjs: set[str], pasta_desti
 def escrever_manifesto(pasta_destino: Path, caminhos: dict[str, Path],
                        linhas_salvas: dict[str, int], linhas_lidas: dict[str, int],
                        total_cnpjs: int, competencia: str | None) -> Path:
-    """Grava o contrato de entrega ao lado dos parquet.
-
-    Existe por dois motivos concretos.
-
-    O primeiro é que os tipos declarados no dicionário LAYOUTS ("data",
-    "moeda", "texto") eram escritos e nunca lidos: quem consome o LAYOUTS faz
-    `[c for c, _ in ...]` e descarta o tipo. Era uma promessa que o código não
-    cumpria, e alguém acabaria confiando nela. O parquet continua saindo com
-    tudo em texto, que é o certo, converter é trabalho do tratamento --, mas
-    agora o tratamento recebe por escrito quais colunas são data e quais são
-    moeda, em vez de ter que adivinhar ou duplicar a tabela.
-
-    O segundo é a competência. A RN-08 e a tabela ponte do modelo estrela
-    exigem declarar de qual competência veio o quadro societário, porque a
-    Receita não publica data de saída da sociedade: cada arquivo é um retrato
-    do momento. Sem isso registrado junto ao dado, essa informação se perde na
-    primeira vez que alguém copiar a pasta.
-    """
     manifesto = {
         "competencia": competencia,
         "total_cnpjs_no_filtro": total_cnpjs,
@@ -440,9 +361,6 @@ def escrever_manifesto(pasta_destino: Path, caminhos: dict[str, Path],
     return destino
 
 
-# ---------------------------------------------------------------------------
-# CLI
-# ---------------------------------------------------------------------------
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--filtro", help="regex pra baixar só parte dos arquivos (ex.: 'Socios')")

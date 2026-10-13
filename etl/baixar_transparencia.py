@@ -1,15 +1,4 @@
-"""
-Uso (rodar de dentro de etl/):
-    pip install python-dotenv
-    python baixar_transparencia.py
-
-Gera: dados/raw/transparencia/contratos_2025.jsonl
-
-IMPORTANTE: a API da CGU muda de vez em quando o nome exato dos parametros
-de data por endpoint. Confiram o endpoint /contratos no Swagger antes de
-rodar de verdade:
-https://api.portaldatransparencia.gov.br/swagger-ui.html
-"""
+"""Uso (rodar de dentro de etl/):"""
 
 import json
 import os
@@ -27,7 +16,7 @@ BASE_URL = "https://api.portaldatransparencia.gov.br/api-de-dados/contratos"
 API_KEY = os.environ.get("TRANSPARENCIA_API_KEY")
 
 
-TAMANHO_PAGINA = 500  # confirmado como maximo aceito por outros endpoints da CGU
+TAMANHO_PAGINA = 500
 
 
 def buscar_pagina(pagina: int, codigo_orgao: str = None) -> list:
@@ -72,10 +61,6 @@ def main():
     print(f"== Baixando contratos Portal da Transparencia: "
           f"{config.DATA_INICIAL_TRANSPARENCIA} a {config.DATA_FINAL_TRANSPARENCIA} ==")
 
-    # Se ORGAOS_RECORTE estiver vazio, tentamos sem filtro de orgao primeiro.
-    # Se a API responder 400 (ver mensagem de erro acima), preencham
-    # ORGAOS_RECORTE em config.py e rodem de novo, o loop abaixo passa a
-    # varrer 1 orgao por vez automaticamente.
     lista_orgaos = config.ORGAOS_RECORTE or [None]
 
     total_gravado = 0
@@ -95,9 +80,9 @@ def main():
                       f"(total {total_gravado})")
 
                 if len(registros) < TAMANHO_PAGINA:
-                    break  # ultima pagina deste orgao
+                    break
                 pagina += 1
-                time.sleep(0.5)  # a API da CGU e mais sensivel a rate limit
+                time.sleep(0.5)
 
     print(f"== Concluido: {total_gravado} registros em {saida} ==")
 

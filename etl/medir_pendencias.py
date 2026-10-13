@@ -5,7 +5,6 @@ import config
 
 RAW = pathlib.Path(config.DIR_DADOS_RAW) / "receita"
 
-# ---------- 1. Descompactado real ----------
 print("== 1. Descompactado real ==")
 total, por_tipo = 0, {}
 for z in sorted(RAW.glob("*.zip")):
@@ -18,7 +17,6 @@ for k, v in por_tipo.items():
     print(f"  {k:18} {v/1e9:8.2f} GB")
 print(f"  TOTAL              {total/1e9:8.2f} GB decimais | {total/2**30:.2f} GiB")
 
-# ---------- leitura de amostra direto do ZIP (primeiras 200 mil linhas) ----------
 def amostra(zip_path, cols, usecols=None, n=200_000):
     with zipfile.ZipFile(zip_path) as zf:
         with zf.open(zf.namelist()[0]) as f:
@@ -26,7 +24,6 @@ def amostra(zip_path, cols, usecols=None, n=200_000):
                                dtype=str, encoding="latin-1", nrows=n,
                                keep_default_na=False, na_values=[""])
 
-# ---------- 2a. Sócios ----------
 print("\n== 2a. Sócios (Socios1.zip, 200 mil primeiras linhas) ==")
 COLS_SOC = ["cnpj_basico", "identificador_de_socio", "nome_do_socio", "cnpj_cpf_do_socio",
             "qualificacao_do_socio", "data_entrada_sociedade", "pais", "cpf_representante",
@@ -45,7 +42,6 @@ print("linhas duplicadas:", s.duplicated().sum())
 print("PF distintos por máscara:", pf.cnpj_cpf_do_socio.nunique(),
       "| por máscara + nome:", pf[["cnpj_cpf_do_socio", "nome_do_socio"]].drop_duplicates().shape[0])
 
-# ---------- 2b. Estabelecimentos ----------
 print("\n== 2b. Estabelecimentos (Estabelecimentos1.zip, 200 mil primeiras linhas) ==")
 COLS_EST = ["cnpj_basico", "cnpj_ordem", "cnpj_dv", "identificador_matriz_filial", "nome_fantasia",
             "situacao_cadastral", "data_situacao_cadastral", "motivo_situacao_cadastral",
@@ -64,7 +60,6 @@ print("tamanho do CNAE:", e.cnae_fiscal_principal.str.len().value_counts().to_di
 print("tamanho do código de município:", e.municipio.str.len().value_counts().to_dict())
 print("data_inicio_atividade = 00000000:", round((e.data_inicio_atividade == "00000000").mean() * 100, 2), "%")
 
-# ---------- 3. Universos de fornecedor e valores fora da faixa (contratos tratados) ----------
 import duckdb
 P = "dados/parquet/contratos/*/*.parquet"
 con = duckdb.connect()

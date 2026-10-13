@@ -1,20 +1,4 @@
-"""
-Inferencia de genero pelo primeiro nome (RN-04).
-
-Consulta a base de nomes do Censo 2022 do IBGE e classifica como feminino ou
-masculino quando a proporcao dominante atinge o limiar; abaixo disso fica
-indeterminado. O denominador e a soma de masculino e feminino.
-
-Nome composto nao funciona na API, so o primeiro token isolado. Nomes raros
-sao suprimidos na origem e caem em indeterminado. O resultado de cada nome
-distinto fica em cache no disco.
-
-Uso:
-    python inferir_genero.py
-    python inferir_genero.py --limite 200
-    python inferir_genero.py --limiar 0.95
-    python inferir_genero.py --arquivo nomes.txt
-"""
+"""Inferencia de genero pelo primeiro nome (RN-04)."""
 
 import argparse
 import csv
@@ -35,23 +19,18 @@ import requests
 import config
 
 API = "https://servicodados.ibge.gov.br/api/v3/nomes/2022/nome/"
-LIMIAR_PADRAO = 0.90          # 90%, conforme a RN-04
-# O IBGE so publica nomes com 20 ou mais ocorrencias no Brasil (15 na UF, 10
-# no municipio). Abaixo desse piso a proporcao e ruido: 3 registros femininos
-# e nenhum masculino dariam 100% e nao significam nada.
+LIMIAR_PADRAO = 0.90
 MINIMO_OCORRENCIAS = 20
-INTERVALO_PADRAO = 0.25       # segundos entre requisicoes, para nao abusar
+INTERVALO_PADRAO = 0.25
 TIMEOUT = 30
 MAX_TENTATIVAS = 4
-BASE = Path(__file__).resolve().parent                # .../etl
-LINHAS_SOCIOS = 200_000                               # como no medir_pendencias.py
+BASE = Path(__file__).resolve().parent
+LINHAS_SOCIOS = 200_000
 
-# Particulas que nunca sao o primeiro nome de fato.
 PARTICULAS = {"DE", "DA", "DO", "DAS", "DOS", "E", "D", "DI", "DEL", "VAN", "VON"}
 
 
 def normalizar(texto: str) -> str:
-    """Maiusculas, sem acento, so letras. A base nao tem sinais diacriticos."""
     if not texto:
         return ""
     sem_acento = unicodedata.normalize("NFKD", texto)
@@ -60,23 +39,14 @@ def normalizar(texto: str) -> str:
 
 
 def primeiro_nome(nome_completo: str) -> str:
-    """O primeiro token utilizavel.
-
-    Pula particulas e iniciais abreviadas: "J. C. SILVA" nao tem primeiro
-    nome consultavel, e "DE SOUZA MARIA" comeca numa particula.
-    """
     for token in normalizar(nome_completo).split():
         if token in PARTICULAS:
             continue
-        # Primeiro token que nao e particula: se for so uma inicial, nao ha
-        # primeiro nome consultavel (pegar o token seguinte seria pegar o
-        # sobrenome e classificar "J C SANTOS" como se SANTOS fosse um nome).
         return token if len(token) >= 3 else ""
     return ""
 
 
 class Cache:
-    """Resultados por nome distinto, persistidos em disco."""
 
     def __init__(self, caminho: Path):
         self.caminho = caminho
@@ -106,7 +76,6 @@ class Cache:
 
 
 def frequencia(sessao, nome: str):
-    """(feminino, masculino) do Censo 2022 para um primeiro nome. (0, 0) se ausente."""
     for tentativa in range(1, MAX_TENTATIVAS + 1):
         try:
             resp = sessao.get(API + nome, params={"tipo": "nome", "localidade": 0},
@@ -115,7 +84,7 @@ def frequencia(sessao, nome: str):
                 requests.exceptions.ConnectionError):
             time.sleep(2 ** tentativa)
             continue
-        if resp.status_code == 404:                  # nome ausente da base
+        if resp.status_code == 404:
             return 0, 0
         if resp.status_code == 429 or resp.status_code >= 500:
             time.sleep(2 ** tentativa)
@@ -124,8 +93,6 @@ def frequencia(sessao, nome: str):
         try:
             dados = resp.json()
         except ValueError:
-            # Se algum WAF responder HTML com status 200, tratar como nome
-            # ausente esconderia o defeito. Falha alto.
             raise RuntimeError(
                 f"nome {nome}: resposta nao e JSON (provavel bloqueio; confira "
                 f"a normalizacao de acentos). Trecho: {resp.text[:80]!r}")
@@ -138,25 +105,6 @@ def frequencia(sessao, nome: str):
 
 
 def classificar(freq_f: int, freq_m: int, limiar: float, minimo: int = MINIMO_OCORRENCIAS):
-    """Devolve (classe, confianca, motivo).
-
-    Tres caminhos para indeterminado, e vale distingui-los no relatorio
-    porque tem causas diferentes:
-
-    ausente, o nome nao aparece na base. O IBGE suprime nomes com menos
-                de 20 ocorrencias no Brasil, entao "ausente" nao quer dizer
-                que ninguem se chama assim, e sim que sao poucos. Nomes
-                estrangeiros e grafias raras caem aqui.
-    instavel, o nome aparece, mas com frequencia total baixa demais para
-                a proporcao significar alguma coisa. Um nome com 3 registros
-                femininos e nenhum masculino da 100%, e isso e ruido.
-    ambiguo, o nome aparece com frequencia boa, mas a proporcao dominante
-                nao alcanca o limiar. E o caso genuinamente ambiguo.
-
-    O denominador e sempre M+F, e nao o "frequencia" total da resposta: a
-    supressao do IBGE e aplicada por celula, entao usar so a soma dos sexos
-    mantem a proporcao coerente.
-    """
     total = freq_f + freq_m
     if total == 0:
         return "indeterminado", 0.0, "ausente"
@@ -171,12 +119,6 @@ def classificar(freq_f: int, freq_m: int, limiar: float, minimo: int = MINIMO_OC
 
 
 def nomes_socios_pf(limite, semente):
-    """Socios pessoa fisica de Socios1.zip (as primeiras linhas), sorteados.
-
-    Este e o universo certo da RN-04. As colunas da Receita, por posicao:
-    0 cnpj_basico, 1 identificador_de_socio (2 = PF), 2 nome_do_socio.
-    E amostra sequencial, nao aleatoria: o relatorio precisa dizer isso.
-    """
     zip_path = Path(config.DIR_DADOS_RAW) / "receita" / "Socios1.zip"
     if not zip_path.is_file():
         raise SystemExit(f"ERRO: {zip_path} nao existe. Confira o DIR_DADOS_RAW no .env.")
@@ -196,7 +138,6 @@ def nomes_socios_pf(limite, semente):
 
 
 def nomes_do_pncp(limite):
-    """Fornecedores pessoa fisica do PNCP (alternativa ao universo de socios)."""
     import duckdb
     caminho = (Path(config.DIR_DADOS_RAW) / "pncp" /
                f"contratos_{config.ANO_REFERENCIA}_completo.jsonl")
@@ -242,7 +183,6 @@ def main() -> int:
     else:
         nomes, origem = nomes_socios_pf(args.limite, args.semente)
 
-    # Um primeiro nome distinto e uma consulta, mesmo que apareca em varias pessoas.
     contagem, sem_primeiro = Counter(), 0
     for nome in nomes:
         pn = primeiro_nome(nome)
@@ -276,7 +216,6 @@ def main() -> int:
                   f"({(time.time()-inicio)/60:.1f} min)", flush=True)
     cache.salvar()
 
-    # --- classificacao ---
     total = sum(contagem.values())
     if total == 0:
         print("ERRO: nenhum nome utilizavel.")

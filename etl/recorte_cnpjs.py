@@ -1,22 +1,4 @@
-"""
-Monta a lista de CNPJs que define o universo da analise.
-
-Le os contratos do PNCP ja coletados, aplica os criterios de valor da RN-02 e
-opcionalmente o recorte de orgaos, e grava as raizes de CNPJ distintas. E essa
-lista que o baixar_receita.py usa para filtrar os arquivos da Receita.
-
-Saida em config.DIR_RECORTE:
-    cnpjs_raiz.csv        CSV com cabecalho cnpj_basico, consumido pelo filtro
-    cnpjs_raiz.txt        a mesma lista sem cabecalho
-    cnpjs_completos.txt   CNPJ de 14 digitos, so para conferencia
-    orgaos_recorte.csv    orgaos selecionados, quando ha recorte
-    recorte.md            o recorte por escrito
-
-Uso:
-    python recorte_cnpjs.py --todos-orgaos
-    python recorte_cnpjs.py --top-orgaos 100
-    python recorte_cnpjs.py --sem-corte-sanidade
-"""
+"""Monta a lista de CNPJs que define o universo da analise."""
 
 import argparse
 import sys
@@ -27,12 +9,11 @@ import duckdb
 
 import config
 
-CORTE_SANIDADE_PADRAO = 1_000_000_000.0   # R$ 1 bilhao
+CORTE_SANIDADE_PADRAO = 1_000_000_000.0
 TOP_ORGAOS_PADRAO = 50
 
 
 def fonte_contratos(raw_dir: Path) -> str:
-    """O JSONL do PNCP que existir, na ordem de preferencia."""
     pncp = raw_dir / "pncp"
     for nome in (f"contratos_{config.ANO_REFERENCIA}_completo.jsonl",
                  f"contratos_{config.ANO_REFERENCIA}.jsonl"):
@@ -79,7 +60,6 @@ def main() -> int:
                                 union_by_name=true, sample_size=-1)
     """)
 
-    # Normaliza o que interessa e ja deduplica pela chave natural.
     con.execute("""
         CREATE VIEW contratos AS
         SELECT
@@ -100,7 +80,6 @@ def main() -> int:
     print(f"== Recorte a partir de {fonte} ==")
     print(f"   {br(total, 0)} contratos unicos na base\n")
 
-    # --- corte de sanidade ---
     if args.sem_corte_sanidade:
         con.execute("CREATE VIEW elegiveis AS SELECT * FROM contratos WHERE valor > 0")
         print("   corte de sanidade: DESLIGADO (os outliers entram)")
@@ -121,7 +100,6 @@ def main() -> int:
     elegiveis, soma = con.sql("SELECT count(*), sum(valor) FROM elegiveis").fetchone()
     print(f"     restam {br(elegiveis, 0)} contratos, R$ {br(soma)}\n")
 
-    # --- recorte de orgao ---
     if args.todos_orgaos:
         con.execute("CREATE VIEW recortados AS SELECT * FROM elegiveis")
         print("   recorte de orgao: nenhum (todos os orgaos)")
@@ -144,7 +122,6 @@ def main() -> int:
         con.sql("""SELECT orgao_cnpj, orgao_nome, contratos, round(valor,2) AS valor
                    FROM orgaos_top""").write_csv(str(destino / "orgaos_recorte.csv"))
 
-    # --- as listas de CNPJ ---
     completos = [r[0] for r in con.sql("""
         SELECT DISTINCT ni_digitos FROM recortados
         WHERE tipo_pessoa = 'PJ' AND length(ni_digitos) = 14
@@ -159,10 +136,6 @@ def main() -> int:
     (destino / "cnpjs_completos.txt").write_text("\n".join(completos) + "\n", encoding="utf-8")
     (destino / "cnpjs_raiz.txt").write_text("\n".join(raizes) + "\n", encoding="utf-8")
 
-    # CSV com cabecalho `cnpj_basico`: e o formato que o baixar_receita.py
-    # espera em --filtrar-cnpjs, e `cnpj_basico` e o nome que a propria
-    # Receita da a essa coluna. O .txt continua existindo para leitura
-    # humana e para quem quiser usar em shell.
     (destino / "cnpjs_raiz.csv").write_text(
         "cnpj_basico\n" + "\n".join(raizes) + "\n", encoding="utf-8")
 
@@ -175,7 +148,6 @@ def main() -> int:
     print(f"   ({pf} fornecedor(es) pessoa fisica ou com identificador "
           f"irregular ficaram de fora das listas)")
 
-    # --- o recorte por escrito ---
     marcados = []
     dias_arq = Path(fonte).with_suffix(".dias")
     if dias_arq.is_file():
@@ -184,11 +156,7 @@ def main() -> int:
                      if marcados else "")
     dias_periodo = (datetime.strptime(config.DATA_FINAL_PNCP, "%Y%m%d")
                     - datetime.strptime(config.DATA_INICIAL_PNCP, "%Y%m%d")).days + 1
-    # So e preliminar enquanto a coleta nao cobre o periodo. O texto fixo de
-    # antes dizia PRELIMINAR sempre, inclusive no recorte do ano inteiro.
     preliminar = len(marcados) < dias_periodo
-    # O comando vai no arquivo para quem for regerar. So as opcoes que mudam a
-    # lista; o --saida fica de fora para nao gravar caminho local de ninguem.
     opcoes = []
     if args.todos_orgaos:
         opcoes.append("--todos-orgaos")

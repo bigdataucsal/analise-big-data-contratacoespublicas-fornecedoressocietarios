@@ -1,18 +1,4 @@
-"""
-verificar_pncp.py  (v2)
-Compara o JSONL coletado do PNCP com o totalRegistros da API, dia a dia.
-
-Uso (na pasta etl, venv ativo):
-    python verificar_pncp.py                                    # ano todo
-    python verificar_pncp.py --inicio 20250101 --fim 20250131   # so janeiro
-    python verificar_pncp.py --arquivo C:\\caminho\\outro.jsonl
-
-v2: acha numeroControlePncp / dataPublicacaoPncp em camelCase OU snake_case, no topo
-ou aninhado; faz uma sonda da API antes do loop e PARA se a resposta nao for a esperada;
-separa 404 (dia vazio) de erro de rede.
-
-Saidas: verificacao_pncp.csv e dias_incompletos.txt. Nao altera o JSONL nem o controle.
-"""
+"""verificar_pncp.py  (v2)"""
 import argparse
 import csv
 import json
@@ -34,7 +20,6 @@ def norm(k):
 
 
 def achar(obj, alvo, prof=0):
-    """Procura a chave 'alvo' (normalizada) em dicts aninhados, ate 3 niveis."""
     if isinstance(obj, list) and obj and isinstance(obj[0], dict):
         obj = obj[0]
     if not isinstance(obj, dict):
@@ -71,7 +56,7 @@ def ler_jsonl(caminho):
             chave = achar(reg, "numerocontrolepncp")
             if not chave:
                 sem_id += 1
-                if linhas == 2000 and sem_id == linhas:   # nenhuma chave nas primeiras 2000
+                if linhas == 2000 and sem_id == linhas:
                     break
                 continue
             vistos[chave] = str(achar(reg, "datapublicacaopncp") or "")[:10]
@@ -79,7 +64,6 @@ def ler_jsonl(caminho):
 
 
 def consultar(dia, tentativas=6):
-    """Devolve (status_http, totalRegistros|None, trecho_da_resposta)."""
     params = {"dataInicial": dia, "dataFinal": dia, "pagina": 1, "tamanhoPagina": 10}
     ultimo = "sem resposta"
     for t in range(tentativas):
@@ -96,7 +80,7 @@ def consultar(dia, tentativas=6):
                 return 200, int(j["totalRegistros"]), ""
             if r.status_code == 404:
                 if "Cannot GET" in r.text or "<html" in r.text[:200].lower():
-                    return 404, None, r.text[:200]   # rota errada, nao e colecao vazia
+                    return 404, None, r.text[:200]
                 return 404, 0, r.text[:200]
             if r.status_code in (429, 500, 502, 503, 504):
                 ultimo = f"HTTP {r.status_code}"
@@ -149,7 +133,6 @@ def main():
     print(f"   contratos unicos: {len(vistos):,} | duplicatas: {dup:,}")
     print(f"   publicacao de {min(por_dia)} ate {max(por_dia)}")
 
-    # --- sonda: um dia com muito dado local ---
     dia_sonda = max(por_dia, key=por_dia.get)
     print(f"\n== Sonda da API no dia mais cheio do seu arquivo ({dia_sonda}: {por_dia[dia_sonda]:,} contratos) ==")
     status, total, trecho = consultar(dia_sonda.replace("-", ""))

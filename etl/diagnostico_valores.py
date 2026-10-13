@@ -1,12 +1,4 @@
-"""
-diagnostico_valores.py
-Olha o Parquet de contratos: colunas, maiores valores, concentracao do valor
-e tamanho dos universos PJ / PF. Nao grava nada.
-
-Uso (na pasta etl, venv ativo):
-    python diagnostico_valores.py
-    python diagnostico_valores.py --parquet "dados/parquet/contratos/*/*.parquet"
-"""
+"""diagnostico_valores.py"""
 import argparse
 
 import duckdb
