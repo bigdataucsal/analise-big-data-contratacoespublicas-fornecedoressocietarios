@@ -240,17 +240,21 @@ CREATE INDEX IF NOT EXISTS ix_socio_genero    ON dim_socio (genero);
 -- consome a MESMA cota de 1 GB -- ou seja, o painel lento tambem enche o
 -- disco. Materializar resolve os dois problemas.
 --
--- Pendente para a carga da Fase 2, e declarado na RN-02 e na RN-05: esta
--- visao do KPI ainda nao tira os contratos de receita (receita = true), nao
--- aplica a regra do socio pessoa juridica e poe as empresas sem socio na
--- base junto com as mistas. Os numeros de genero publicados ate agora vem
--- do classificar_empresas.py, nao daqui.
+-- Alinhado na Fase 2 com RN-02 e RN-05 (classificar_empresas.py):
+-- 1. Filtra contratos de despesa com valor positivo (receita = FALSE e
+--    valor_global > 0).
+-- 2. Separa empresas sem linha de socio na base ('sem_socio_na_base').
+-- 3. Aplica a regra do socio pessoa juridica (identificador_tipo = 1 ->
+--    'misto ou indeterminado') antes de avaliar os socios PF elegiveis.
 
-CREATE MATERIALIZED VIEW IF NOT EXISTS mv_kpi_genero_setor AS
+DROP MATERIALIZED VIEW IF EXISTS mv_kpi_genero_setor;
+
+CREATE MATERIALIZED VIEW mv_kpi_genero_setor AS
 SELECT
     t.ano,
     t.mes,
     f2.cnae_principal,
+    f2.porte,
     m.uf_sigla,
     CASE
         WHEN m.pct_negra >= 70 THEN 'alta'
@@ -259,41 +263,71 @@ SELECT
     END                                   AS faixa_pct_negra,
     controle.genero_controle,
     count(*)                              AS contratos,
+    count(DISTINCT f.id_fornecedor)       AS fornecedores_distintos,
     sum(f.valor_global)                   AS valor_total,
     percentile_cont(0.5) WITHIN GROUP (ORDER BY f.valor_global) AS valor_mediano
 FROM fato_contrato f
 JOIN dim_tempo t        ON t.id_tempo = f.id_tempo_publicacao
 JOIN dim_fornecedor f2  ON f2.id_fornecedor = f.id_fornecedor
 LEFT JOIN dim_municipio m ON m.id_municipio = f2.id_municipio_sede
--- Classificacao de controle da empresa pela RN-05: contagem por cabeca
--- entre os socios elegiveis, porque o percentual de participacao de cada
--- socio nao consta dos dados abertos.
+-- Classificacao de controle da empresa pela RN-05 alinhada com
+-- classificar_empresas.py: contagem por cabeca entre os socios PF
+-- elegiveis, respeitando a presenca de socio PJ e a ausencia de socios.
 LEFT JOIN LATERAL (
-    SELECT CASE
-        WHEN count(*) FILTER (WHERE s.genero = 'indeterminado')
-             > count(*) / 3.0                                   THEN 'misto ou indeterminado'
-        WHEN count(*) FILTER (WHERE s.genero = 'feminino')
-             > count(*) / 2.0                                   THEN 'feminino'
-        WHEN count(*) FILTER (WHERE s.genero = 'masculino')
-             > count(*) / 2.0                                   THEN 'masculino'
-        ELSE 'misto ou indeterminado'
-    END AS genero_controle
+    SELECT
+        count(*)                                                              AS total_vinculos,
+        bool_or(s.identificador_tipo = 1)                                     AS tem_pj,
+        count(*) FILTER (
+            WHERE s.identificador_tipo = 2
+              AND p.grupo_qualificacao IN ('participacao', 'titularidade', 'administracao')
+        )                                                                     AS n_pf_elegiveis,
+        count(*) FILTER (
+            WHERE s.identificador_tipo = 2
+              AND p.grupo_qualificacao IN ('participacao', 'titularidade', 'administracao')
+              AND s.genero = 'feminino'
+        )                                                                     AS n_fem,
+        count(*) FILTER (
+            WHERE s.identificador_tipo = 2
+              AND p.grupo_qualificacao IN ('participacao', 'titularidade', 'administracao')
+              AND s.genero = 'masculino'
+        )                                                                     AS n_masc,
+        count(*) FILTER (
+            WHERE s.identificador_tipo = 2
+              AND p.grupo_qualificacao IN ('participacao', 'titularidade', 'administracao')
+              AND s.genero = 'indeterminado'
+        )                                                                     AS n_ind
     FROM ponte_empresa_socio p
     JOIN dim_socio s ON s.id_socio = p.id_socio
     WHERE p.id_fornecedor = f.id_fornecedor
-      AND p.grupo_qualificacao IN ('participacao', 'titularidade', 'administracao')
-      AND s.identificador_tipo = 2      -- so socio pessoa fisica
-) controle ON TRUE
-GROUP BY 1, 2, 3, 4, 5, 6;
+) soc ON TRUE
+CROSS JOIN LATERAL (
+    SELECT CASE
+        WHEN soc.total_vinculos = 0                        THEN 'sem_socio_na_base'
+        WHEN soc.tem_pj                                    THEN 'misto ou indeterminado'
+        WHEN soc.n_pf_elegiveis = 0                        THEN 'indeterminado'
+        WHEN soc.n_ind > soc.n_pf_elegiveis / 3.0          THEN 'misto ou indeterminado'
+        WHEN soc.n_fem > soc.n_pf_elegiveis / 2.0          THEN 'feminino'
+        WHEN soc.n_masc > soc.n_pf_elegiveis / 2.0         THEN 'masculino'
+        ELSE 'misto ou indeterminado'
+    END AS genero_controle
+) controle
+WHERE f.receita = FALSE
+  AND f.valor_global > 0
+GROUP BY 1, 2, 3, 4, 5, 6, 7;
 
 CREATE INDEX IF NOT EXISTS ix_mv_kpi_genero
     ON mv_kpi_genero_setor (ano, uf_sigla, genero_controle);
+
+CREATE INDEX IF NOT EXISTS ix_mv_kpi_genero_cnae_raca
+    ON mv_kpi_genero_setor (cnae_principal, faixa_pct_negra, porte);
 
 -- Concentracao societaria: por socio, em quantas empresas fornecedoras ele
 -- aparece e quanto valor essas empresas capturaram. A marcacao de
 -- sobreposicao existe porque, sem ela, a soma por socio ultrapassa o total
 -- contratado quando a mesma empresa tem varios socios multiempresa.
-CREATE MATERIALIZED VIEW IF NOT EXISTS mv_concentracao_socio AS
+DROP MATERIALIZED VIEW IF EXISTS mv_concentracao_socio;
+
+CREATE MATERIALIZED VIEW mv_concentracao_socio AS
 SELECT
     s.id_socio,
     s.identificador_pub,
@@ -311,6 +345,8 @@ LEFT JOIN LATERAL (
     WHERE p2.id_fornecedor = p.id_fornecedor
 ) sobreposto ON TRUE
 WHERE p.grupo_qualificacao IN ('participacao', 'titularidade')
+  AND f.receita = FALSE
+  AND f.valor_global > 0
 GROUP BY 1, 2, 3
 HAVING count(DISTINCT p.id_fornecedor) >= 2;   -- RN-07: socio multiempresa
 
