@@ -1,0 +1,90 @@
+name: CI - Infraestrutura Terraform e Pipeline ETL
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+jobs:
+  terraform-check:
+    name: Validar IaC (Terraform)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: terraform
+    steps:
+      - name: Checkout do repositorio
+        uses: actions/checkout@v4
+
+      - name: Configurar Terraform
+        uses: hashicorp/setup-terraform@v3
+
+      - name: Terraform Init (sem tocar no estado local)
+        run: terraform init -backend=false
+
+      - name: Verificar formatacao (terraform fmt)
+        run: terraform fmt -check -diff
+
+      - name: Validar configuracao (terraform validate)
+        run: terraform validate
+
+  etl-and-db-check:
+    name: Validar Scripts ETL, Schema Estrela e Indices na Aiven
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout do repositorio
+        uses: actions/checkout@v4
+
+      - name: Configurar Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+          cache-dependency-path: etl/requirements.txt
+
+      - name: Instalar dependencias do ETL
+        run: pip install -r etl/requirements.txt
+
+      - name: Validar sintaxe dos scripts Python do ETL
+        run: python -m py_compile etl/*.py
+
+      - name: Garantir Schema Estrela, Indices de Juncao e Orcamento de Disco (1 GB)
+        env:
+          AIVEN_PG_URI: ${{ secrets.PG_URI }}
+          DATABASE_URL: ${{ secrets.PG_URI }}
+        run: |
+          python - << 'EOF'
+          import os, pathlib, sys, psycopg2
+
+          uri = os.getenv("AIVEN_PG_URI") or os.getenv("DATABASE_URL")
+          if not uri:
+              sys.exit("ERRO: Secret PG_URI nao configurado no GitHub Actions.")
+
+          con = psycopg2.connect(uri, connect_timeout=20)
+          con.autocommit = True
+          cur = con.cursor()
+
+          ddl = pathlib.Path("etl/schema_estrela.sql").read_text(encoding="utf-8")
+          cur.execute(ddl)
+
+          cur.execute("""
+              SELECT tablename, indexname
+              FROM pg_indexes
+              WHERE schemaname = current_schema() AND indexname LIKE 'ix_%'
+              ORDER BY tablename, indexname
+          """)
+          indices = cur.fetchall()
+          print(f"Total de indices ix_* validados: {len(indices)}")
+          for tab, idx in indices:
+              print(f"  - {tab}: {idx}")
+          assert len(indices) >= 12, f"Esperados ao menos 12 indices ix_*, encontrados {len(indices)}"
+
+          cur.execute("SELECT pg_database_size(current_database())")
+          uso_mb = cur.fetchone()[0] / 1e6
+          print(f"Uso atual de disco no PostgreSQL (Aiven): {uso_mb:.2f} MB / 1024 MB")
+          assert uso_mb < 950, f"Alerta critico: disco em {uso_mb:.2f} MB (proximo ao limite de 1 GB)"
+
+          con.close()
+          EOF
