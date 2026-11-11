@@ -1,49 +1,4 @@
-"""
-Carga dos contratos tratados no Aiven for PostgreSQL.
-=====================================================================
-Le os CSV gerados pelo tratar_contratos.py e carrega via COPY, que e a
-via rapida do Postgres para volume -- um INSERT por linha levaria horas
-onde o COPY leva minutos.
-
-ATENCAO -- este carregador aponta para o schema ANTIGO
-------------------------------------------------------
-Ele carrega contra o schema_postgres.sql, que e uma tabela unica
-desnormalizada. Esse schema foi superado pelo schema_estrela.sql, porque
-medimos que a tabela unica ocuparia cerca de 1,9 GB no recorte completo
-contra um orcamento utilizavel de 500 a 700 MB (ver
-docs/escolha-do-banco.md).
-
-Para uma amostra pequena, como os 58 mil contratos de janeiro, este
-carregador funciona e serve para validar a conexao com o Aiven. Para o
-recorte completo, a carga precisa ser reescrita para o modelo estrela:
-popular as dimensoes, resolver as chaves e so entao carregar o fato.
-Esse trabalho ainda nao foi feito.
-
-Pre-requisitos:
-    pip install "psycopg[binary]" python-dotenv
-    python tratar_contratos.py          # gera os CSV
-
-Credencial no .env (ja coberto pelo .gitignore, nao committem):
-    AIVEN_PG_URI=postgres://usuario:senha@host.aivencloud.com:12345/defaultdb?sslmode=require
-
-Uso (rodar de dentro de etl/):
-    python carregar_aiven.py --simular      # nao conecta, so confere os CSV
-    python carregar_aiven.py                # carga completa (substitui)
-    python carregar_aiven.py --modo incremental   # upsert, preserva o resto
-
-Modos
------
-substituir  : TRUNCATE + COPY. Mais rapido. Use na carga completa.
-incremental : COPY numa staging UNLOGGED e depois INSERT ... ON CONFLICT
-              DO UPDATE. Mais lento, porem idempotente -- reprocessar um
-              mes atualiza as linhas em vez de estourar a chave primaria.
-
-Ordem da carga
---------------
-Tabela -> COPY -> indices -> ANALYZE. Os indices ficam por ultimo de
-proposito: criar tudo de uma vez no fim e bem mais rapido do que manter
-as arvores atualizadas durante o COPY.
-"""
+"""Carga dos contratos tratados no PostgreSQL da Aiven."""
 
 import argparse
 import os
@@ -54,8 +9,6 @@ from pathlib import Path
 DIR_CSV_PADRAO = Path("dados/saida_postgres/contratos")
 TABELA = "contratos"
 
-# Precisa bater, em ordem, com o cabecalho do CSV e com as colunas 1-49 do
-# schema_postgres.sql. ano_mes fica de fora: e coluna gerada no Postgres.
 COLUNAS = [
     "numero_controle_pncp", "numero_controle_compra", "numero_controle_ata",
     "ano_contrato", "sequencial_contrato", "numero_contrato_empenho", "processo",
@@ -72,6 +25,7 @@ COLUNAS = [
     "categoria_processo_nome", "receita", "emenda_parlamentar", "fruto_adesao",
     "tem_remanejamento", "objeto_contrato", "informacao_complementar",
     "identificador_cipi",
+    "contrato_suspeito", "acima_sensibilidade", "elegivel_valor",
 ]
 
 
@@ -81,8 +35,6 @@ def fmt_br(valor, casas: int = 0) -> str:
 
 
 def listar_csvs(dir_csv: Path) -> list:
-    """CSV em ordem de mes, para a tabela ficar quase ordenada por
-    data_publicacao -- e o que faz o indice BRIN do schema valer a pena."""
     return sorted(dir_csv.rglob("*.csv"), key=lambda p: (p.parent.name, p.name))
 
 
@@ -104,8 +56,6 @@ def conferir_cabecalho(caminho: Path) -> None:
 
 def sql_copy(tabela: str) -> str:
     colunas = ", ".join(COLUNAS)
-    # NULL '' porque o DuckDB grava nulo como campo vazio. HEADER MATCH nao
-    # serve: a lista explicita e o que garante a posicao correta.
     return (f"COPY {tabela} ({colunas}) FROM STDIN "
             f"WITH (FORMAT CSV, HEADER, NULL '')")
 
@@ -118,10 +68,8 @@ def carregar(uri: str, dir_csv: Path, modo: str, criar_indices: bool) -> int:
 
     with psycopg.connect(uri, autocommit=False) as con:
         with con.cursor() as cur:
-            # Numa carga em lote nao ha o que perder esperando o fsync de
-            # cada commit: se cair no meio, o remedio e refazer a carga.
             cur.execute("SET synchronous_commit = off")
-            cur.execute("SET maintenance_work_mem = '512MB'")  # p/ os indices
+            cur.execute("SET maintenance_work_mem = '512MB'")
 
             print("-- criando tabela (se nao existir)")
             ddl = Path("schema_postgres.sql").read_text(encoding="utf-8")
@@ -130,10 +78,6 @@ def carregar(uri: str, dir_csv: Path, modo: str, criar_indices: bool) -> int:
             con.commit()
 
             if modo == "substituir":
-                # Derruba os indices de uma execucao anterior antes do COPY.
-                # Sem isso, a promessa de "indices so no fim" valeria apenas
-                # na primeira carga -- da segunda em diante o COPY entraria
-                # com as arvores todas montadas.
                 print(f"-- removendo indices anteriores")
                 cur.execute("""
                     SELECT indexname FROM pg_indexes
@@ -150,8 +94,6 @@ def carregar(uri: str, dir_csv: Path, modo: str, criar_indices: bool) -> int:
                 destino = f"{TABELA}_stg"
                 print(f"-- staging UNLOGGED {destino}")
                 cur.execute(f"DROP TABLE IF EXISTS {destino}")
-                # UNLOGGED: a staging nao precisa sobreviver a queda do
-                # servidor, entao pular o WAL economiza metade da escrita.
                 cur.execute(f"CREATE UNLOGGED TABLE {destino} "
                             f"(LIKE {TABELA} INCLUDING DEFAULTS "
                             f" EXCLUDING CONSTRAINTS EXCLUDING INDEXES)")
@@ -164,7 +106,7 @@ def carregar(uri: str, dir_csv: Path, modo: str, criar_indices: bool) -> int:
                 t = time.time()
                 with open(caminho, "r", encoding="utf-8", newline="") as f:
                     with cur.copy(sql_copy(destino)) as copia:
-                        while bloco := f.read(1 << 20):   # 1 MB por vez
+                        while bloco := f.read(1 << 20):
                             copia.write(bloco)
                 con.commit()
                 linhas = cur.rowcount if cur.rowcount and cur.rowcount > 0 else 0
@@ -201,10 +143,6 @@ def carregar(uri: str, dir_csv: Path, modo: str, criar_indices: bool) -> int:
                         cur.execute(comando)
                         con.commit()
                     except Exception as e:
-                        # O pg_trgm e o indice que depende dele sao os unicos
-                        # que exigem permissao de extensao. Se o papel do
-                        # Aiven nao tiver, o resto da carga ja esta no lugar
-                        # e nao faz sentido derrubar tudo por causa disso.
                         con.rollback()
                         resumo = " ".join(comando.split())[:70]
                         print(f"   AVISO: falhou e foi ignorado -> {resumo}...")
@@ -234,7 +172,7 @@ def simular(dir_csv: Path) -> int:
     for caminho in arquivos:
         conferir_cabecalho(caminho)
         with open(caminho, encoding="utf-8") as f:
-            linhas = sum(1 for _ in f) - 1          # menos o cabecalho
+            linhas = sum(1 for _ in f) - 1
         tamanho = caminho.stat().st_size
         total_linhas += linhas
         total_bytes += tamanho
@@ -243,7 +181,7 @@ def simular(dir_csv: Path) -> int:
 
     print(f"\n   total: {fmt_br(total_linhas)} linhas, {total_bytes/1e6:.1f} MB")
     print(f"   destino: tabela {TABELA}, {len(COLUNAS)} colunas via COPY")
-    print(f"   ano_mes nao vai no COPY -- e coluna gerada no Postgres")
+    print(f"   ano_mes nao vai no COPY, e coluna gerada no Postgres")
     print("\n   Tudo certo. Para carregar de verdade:")
     print("     1. AIVEN_PG_URI=... no .env")
     print("     2. python carregar_aiven.py")
@@ -286,12 +224,10 @@ def main() -> int:
         print("ERRO: defina AIVEN_PG_URI no .env (ou passe --uri).")
         print("  Formato: postgres://usuario:senha@host.aivencloud.com:PORTA/"
               "defaultdb?sslmode=require")
-        print("  O .gitignore ja cobre o .env -- nao committem a credencial.")
+        print("  O .gitignore ja cobre o .env, nao committem a credencial.")
         return 1
 
     if "sslmode=" not in uri:
-        # O Aiven so aceita conexao TLS; sem isso a conexao e recusada e o
-        # erro que volta nao diz o motivo.
         uri += ("&" if "?" in uri else "?") + "sslmode=require"
 
     arquivos = listar_csvs(dir_csv)
@@ -299,7 +235,6 @@ def main() -> int:
         print(f"ERRO: nenhum CSV em {dir_csv}. Rode antes: python tratar_contratos.py")
         return 1
 
-    # Sem host nem usuario no log: a URI carrega a senha.
     print(f"== Carga no Aiven for PostgreSQL ==")
     print(f"   modo   : {args.modo}")
     print(f"   origem : {dir_csv} ({len(arquivos)} arquivo(s))")

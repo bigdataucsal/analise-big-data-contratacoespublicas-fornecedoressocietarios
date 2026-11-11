@@ -1,37 +1,4 @@
-"""
-Tratamento dos contratos brutos do PNCP -> camada analitica + carga no Aiven.
-=============================================================================
-Le os JSONL brutos, achata o aninhado, tipa, normaliza, deduplica e grava:
-
-  1. dados/parquet/contratos/ano_mes=AAAA-MM/*.parquet  (camada analitica)
-  2. dados/saida_postgres/contratos/ano_mes=AAAA-MM/*.csv  (carga no Aiven)
-
-NAO escreve em dados/raw/. Os arquivos do extrator original
-(contratos_2025.jsonl e contratos_2025.checkpoint) sao lidos e nunca alterados.
-
-Por que DuckDB e nao pandas
----------------------------
-O bruto completo e ~2 milhoes de contratos em JSON aninhado (~3,5 GB). Com
-pandas isso exige carregar tudo em memoria e achatar linha a linha em Python.
-O DuckDB le o glob de JSONL em paralelo, achata em SQL, processa fora da
-memoria (nao precisa de RAM maior que o dado) e escreve Parquet particionado
-num unico comando. Sem cluster, sem JVM, uma dependencia so -- que e o ponto
-certo para este volume numa maquina. PySpark resolveria, mas num no unico
-paga JVM e shuffle sem ganho.
-
-Deduplicacao
-------------
-Obrigatoria, nao opcional: o bruto atual ja tem 400 duplicatas (18.900 linhas
-para 18.500 chaves unicas), porque o resume do extrator original regravou
-paginas ja baixadas. A chave natural e numeroControlePNCP; quando ela repete,
-fica a versao com dataAtualizacaoGlobal mais recente.
-
-Uso (rodar de dentro de etl/):
-    python tratar_contratos.py                    # parquet + csv
-    python tratar_contratos.py --formato parquet  # so a camada analitica
-    python tratar_contratos.py --resumo           # nao grava, so perfila
-    python tratar_contratos.py --threads 8
-"""
+"""Tratamento dos contratos brutos do PNCP."""
 
 import argparse
 import shutil
@@ -44,9 +11,6 @@ import duckdb
 
 import config
 
-# Schema explicito de proposito. Com inferencia automatica, um shard em que
-# orgaoSubRogado e sempre nulo infere VARCHAR enquanto outro infere STRUCT, e
-# a leitura do glob quebra. Declarar resolve e documenta o contrato do dado.
 STRUCT_ORGAO = "STRUCT(cnpj VARCHAR, razaoSocial VARCHAR, poderId VARCHAR, esferaId VARCHAR)"
 STRUCT_UNIDADE = ("STRUCT(ufNome VARCHAR, codigoUnidade VARCHAR, nomeUnidade VARCHAR, "
                   "ufSigla VARCHAR, municipioNome VARCHAR, codigoIbge VARCHAR)")
@@ -64,8 +28,6 @@ COLUNAS_BRUTO = {
     "processo": "VARCHAR",
     "objetoContrato": "VARCHAR",
     "informacaoComplementar": "VARCHAR",
-    # Datas entram como texto e sao convertidas com TRY_CAST mais adiante:
-    # uma linha com data torta vira NULL em vez de derrubar a carga inteira.
     "dataAssinatura": "VARCHAR",
     "dataVigenciaInicio": "VARCHAR",
     "dataVigenciaFim": "VARCHAR",
@@ -98,9 +60,6 @@ COLUNAS_BRUTO = {
     "unidadeSubRogada": STRUCT_UNIDADE,
 }
 
-# SELECT do tratamento. Nomes em snake_case porque o Postgres rebaixa
-# identificador nao aspeado para minusculo -- manter camelCase obrigaria a
-# aspear cada coluna em toda consulta no Aiven.
 SQL_TRATAMENTO = """
 WITH bruto AS (
     SELECT * FROM read_json([{fontes}], format='newline_delimited',
@@ -123,8 +82,6 @@ tipado AS (
         TRY_CAST(dataVigenciaInicio    AS DATE)              AS data_vigencia_inicio,
         TRY_CAST(dataVigenciaFim       AS DATE)              AS data_vigencia_fim,
 
-        -- Dinheiro em DECIMAL, nunca em float: somatorio de 2 milhoes de
-        -- contratos em DOUBLE acumula erro de arredondamento visivel.
         TRY_CAST(valorInicial   AS DECIMAL(18,2))            AS valor_inicial,
         TRY_CAST(valorGlobal    AS DECIMAL(18,2))            AS valor_global,
         TRY_CAST(valorParcela   AS DECIMAL(18,2))            AS valor_parcela,
@@ -132,16 +89,11 @@ tipado AS (
         numeroParcelas                                       AS numero_parcelas,
         numeroRetificacao                                    AS numero_retificacao,
 
-        -- Identificador do fornecedor: sempre texto. Virar numero comeria o
-        -- zero a esquerda de CNPJ como 00394429000102.
         nullif(trim(niFornecedor), '')                       AS ni_fornecedor,
         upper(nullif(trim(tipoPessoa), ''))                  AS tipo_pessoa,
         regexp_replace(trim(nomeRazaoSocialFornecedor), '\\s+', ' ', 'g')
                                                              AS nome_fornecedor,
         nullif(trim(codigoPaisFornecedor), '')               AS codigo_pais_fornecedor,
-        -- Raiz do CNPJ (8 primeiros digitos): identifica a empresa por tras de
-        -- matriz e filiais. E por ela que o cruzamento societario com a Receita
-        -- se sustenta -- o CNPJ completo separaria filiais do mesmo grupo.
         CASE WHEN upper(trim(tipoPessoa)) = 'PJ'
                   AND length(regexp_replace(niFornecedor, '[^0-9]', '', 'g')) = 14
              THEN left(regexp_replace(niFornecedor, '[^0-9]', '', 'g'), 8)
@@ -172,9 +124,6 @@ tipado AS (
         categoriaProcesso.id                                 AS categoria_processo_id,
         categoriaProcesso.nome                               AS categoria_processo_nome,
 
-        -- No bruto esses booleanos vem nulos quando sao falsos (98% de nulo).
-        -- Normalizar evita que "IS NOT TRUE" e "= FALSE" deem respostas
-        -- diferentes na filtragem la no Aiven.
         coalesce(receita, FALSE)                             AS receita,
         coalesce(emendaParlamentar, FALSE)                   AS emenda_parlamentar,
         coalesce(frutoAdesao, FALSE)                         AS fruto_adesao,
@@ -198,7 +147,12 @@ deduplicado AS (
 )
 SELECT
     *,
-    strftime(data_publicacao, '%Y-%m') AS ano_mes   -- chave de particao
+    coalesce(valor_global > 1000000000.00, FALSE)        AS contrato_suspeito,
+    coalesce(valor_global > 100000000.00, FALSE)         AS acima_sensibilidade,
+    coalesce(valor_global > 0
+             AND valor_global <= 1000000000.00
+             AND NOT receita, FALSE)                     AS elegivel_valor,
+    strftime(data_publicacao, '%Y-%m') AS ano_mes
 FROM deduplicado
 """
 
@@ -210,13 +164,6 @@ def montar_sql(fontes) -> str:
 
 
 def descobrir_fontes(raw_dir: Path) -> list:
-    """Todo JSONL bruto do PNCP que existir.
-
-    Entram os tres formatos que o projeto ja produziu -- o arquivo unico do
-    extrator rapido, os shards diarios da versao anterior dele (se alguem
-    ainda tiver) e o arquivo do extrator original. Todos juntos, porque a
-    deduplicacao por numeroControlePNCP resolve a sobreposicao entre eles.
-    """
     pncp = raw_dir / "pncp"
     fontes = []
 
@@ -239,16 +186,13 @@ def preparar_conexao(threads: int, memoria: str) -> duckdb.DuckDBPyConnection:
     con = duckdb.connect()
     con.execute(f"SET threads = {threads}")
     con.execute(f"SET memory_limit = '{memoria}'")
-    # Sem a ordem de insercao preservada o DuckDB escreve os Parquet em
-    # paralelo e usa bem menos memoria. A ordem das linhas nao importa aqui:
-    # quem consome filtra e agrega.
     con.execute("SET preserve_insertion_order = false")
     return con
 
 
 def gravar_parquet(con, sql: str, destino: Path) -> None:
     if destino.exists():
-        shutil.rmtree(destino)          # particionamento e reescrito inteiro
+        shutil.rmtree(destino)
     destino.mkdir(parents=True, exist_ok=True)
     caminho = str(destino).replace("\\", "/")
     con.execute(f"""
@@ -259,18 +203,10 @@ def gravar_parquet(con, sql: str, destino: Path) -> None:
 
 
 def gravar_csv_postgres(con, sql: str, destino: Path) -> None:
-    """CSV pronto para COPY no Aiven.
-
-    NULL vai como string vazia, que e o padrao que o COPY ... CSV do Postgres
-    entende sem parametro extra. Um CSV por mes: se a carga cair no meio,
-    voces refazem so o mes que faltou.
-    """
     if destino.exists():
         shutil.rmtree(destino)
     destino.mkdir(parents=True, exist_ok=True)
     caminho = str(destino).replace("\\", "/")
-    # ano_mes sai do corpo do CSV (vira nome de pasta) para o arquivo bater
-    # coluna a coluna com a tabela do schema_postgres.sql.
     con.execute(f"""
         COPY (SELECT * FROM ({sql})) TO '{caminho}'
         (FORMAT CSV, HEADER, DELIMITER ',', QUOTE '"', ESCAPE '"', NULL '',
@@ -280,11 +216,6 @@ def gravar_csv_postgres(con, sql: str, destino: Path) -> None:
 
 
 def fmt_br(valor, casas: int = 0) -> str:
-    """Numero no padrao brasileiro: 12.739.091.038,69.
-
-    Um replace(',', '.') sozinho nao serve -- trocaria tambem o separador
-    decimal do format(), virando 12.739.091.038.69.
-    """
     texto = f"{valor:,.{casas}f}"
     return texto.replace(",", "\x00").replace(".", ",").replace("\x00", ".")
 

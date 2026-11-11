@@ -1,8 +1,6 @@
-"""
-Teste comparativo S2: a mesma junção (empresas x sócios) rodada em Pandas sobre CSV e em
+"""Teste comparativo S2: a mesma junção (empresas x sócios) rodada em Pandas sobre CSV e em
 PostgreSQL (Aiven), com os dois tempos cronometrados. É o que transforma a escolha do banco
-em evidência.
-"""
+em evidência."""
 from __future__ import annotations
 
 import argparse
@@ -32,7 +30,6 @@ REPO_ROOT = BASE_DIR.parent
 INVENTORY_DIR = REPO_ROOT / cfg.DIR_INVENTARIO
 INVENTORY_DIR.mkdir(parents=True, exist_ok=True)
 
-# Conexão
 
 def montar_conexao() -> str:
     uri = os.getenv("AIVEN_SERVICE_URI")
@@ -53,18 +50,15 @@ def montar_conexao() -> str:
     return f"postgresql+psycopg2://{user}:{password}@{host}:{port}/{dbname}?sslmode=require"
 
 
-
-# Amostra real: empresas de um shard + sócios filtrados em chunks em todos os shards
-
 def montar_amostra(n_empresas: int) -> tuple[pd.DataFrame, pd.DataFrame]:
     membros = listar_membros_zip(RAW_DIR)
     if not membros:
-        raise RuntimeError(f"Nenhum arquivo em {RAW_DIR} — rodem baixar_receita.py primeiro.")
+        raise RuntimeError(f"Nenhum arquivo em {RAW_DIR}, rodem baixar_receita.py primeiro.")
 
     membros_empresas = [m for m in membros if m["layout"] == "EMPRECSV"]
     membros_socios = [m for m in membros if m["layout"] == "SOCIOCSV"]
     if not membros_empresas or not membros_socios:
-        raise RuntimeError("Faltam arquivos de EMPRECSV ou SOCIOCSV em dados/raw/receita — "
+        raise RuntimeError("Faltam arquivos de EMPRECSV ou SOCIOCSV em dados/raw/receita, "
                             "rodem baixar_receita.py sem --filtro antes.")
 
     primeiro = membros_empresas[0]
@@ -85,10 +79,8 @@ def montar_amostra(n_empresas: int) -> tuple[pd.DataFrame, pd.DataFrame]:
     log.info("%d sócios encontrados pra essas empresas (varrendo todos os shards de sócios)", len(socios))
     return empresas, socios
 
-# O teste em si
 
 def rodar_teste(empresas: pd.DataFrame, socios: pd.DataFrame, engine) -> pd.DataFrame:
-    # 1. Junção em Pandas
     t0 = time.perf_counter()
     resultado_pandas = empresas.merge(socios, on="cnpj_basico", how="inner")
     t_pandas = time.perf_counter() - t0
@@ -118,10 +110,10 @@ def rodar_teste(empresas: pd.DataFrame, socios: pd.DataFrame, engine) -> pd.Data
     log.info("Postgres: %.4fs -> %d linhas", t_postgres, len(resultado_sql))
 
     if len(resultado_pandas) != len(resultado_sql):
-        log.warning("Pandas (%d linhas) e Postgres (%d linhas) discordam — investiguem antes de concluir.",
+        log.warning("Pandas (%d linhas) e Postgres (%d linhas) discordam, investiguem antes de concluir.",
                     len(resultado_pandas), len(resultado_sql))
     else:
-        log.info("OK — os dois métodos concordam no número de linhas do resultado.")
+        log.info("OK, os dois métodos concordam no número de linhas do resultado.")
 
     with engine.begin() as conn:
         conn.execute(text("DROP TABLE IF EXISTS teste_empresas, teste_socios"))
@@ -136,7 +128,6 @@ def rodar_teste(empresas: pd.DataFrame, socios: pd.DataFrame, engine) -> pd.Data
          "tempo_segundos": round(t_postgres, 4)},
     ])
 
-# CLI
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -159,7 +150,7 @@ def main(argv=None):
 
     log.info(
         "Nota pra conclusão: em amostra pequena/média é NORMAL o Pandas ganhar do Postgres numa "
-        "junção isolada (overhead de rede/planejamento). Não invalida a escolha do banco -- o "
+        "junção isolada (overhead de rede/planejamento). Não invalida a escolha do banco, o "
         "argumento real é que a base inteira não cabe em memória, o dashboard repete a mesma "
         "consulta pra usuários diferentes, e só o banco garante integridade referencial e concorrência."
     )

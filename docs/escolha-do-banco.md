@@ -163,7 +163,7 @@ A segunda é a retirada do texto livre, já justificada acima.
 
 A terceira é carregar no banco apenas uma **fato reduzida**: sem o texto do objeto e só com as colunas que as regras de negócio e os KPIs usam, para os contratos que passam no corte de sanidade. A coleta nacional completa permanece no Parquet. O plano inicial era recortar os cinquenta maiores órgãos por valor contratado; essa ideia foi abandonada, porque o KPI de comparação entre estados exige cobertura nacional, e porque o critério de valor selecionava justamente os órgãos com valores digitados errado. A estimativa de 135 MB que acompanhava aquele recorte não vale mais.
 
-Há ainda duas otimizações menores que vale registrar porque são gratuitas. A ordem das colunas no `CREATE TABLE` não é estética: agrupar os tipos de largura fixa antes dos de texto elimina o preenchimento de alinhamento que o PostgreSQL insere entre colunas de tamanhos diferentes, o que medimos em 9,74 bytes por linha, cerca de 20 MB em 2 milhões de linhas. E usar uma chave primária inteira em vez da chave natural de 28 caracteres economiza cerca de 55 MB de índice, mantendo a chave natural como restrição de unicidade.
+Há ainda duas otimizações menores, e as duas são gratuitas. A ordem das colunas no `CREATE TABLE` não é estética: agrupar os tipos de largura fixa antes dos de texto elimina o preenchimento de alinhamento que o PostgreSQL insere entre colunas de tamanhos diferentes, o que medimos em 9,74 bytes por linha, cerca de 20 MB em 2 milhões de linhas. E usar uma chave primária inteira em vez da chave natural de 28 caracteres economiza cerca de 55 MB de índice, mantendo a chave natural como restrição de unicidade.
 
 ## Agregados calculados previamente
 
@@ -171,7 +171,7 @@ Um nó com 1 GB de memória não sustenta consulta analítica pesada a cada cliq
 
 Por isso o schema traz duas visões materializadas, uma para o KPI interseccional e outra para a concentração societária, ambas com índice próprio. O painel consulta os agregados, não o fato.
 
-O filtro de agregação mínima da RN-09, que impede exibir resultado baseado em menos de cinco sócios ou cinco empresas, fica de propósito na camada de apresentação e não na visão materializada, porque o mesmo agregado pode ser seguro num recorte e inseguro noutro.
+O filtro de agregação mínima da RN-09, que impede exibir resultado baseado em menos de cinco sócios ou cinco empresas, fica na camada de apresentação e não na visão materializada, porque o mesmo agregado pode ser seguro num recorte e inseguro noutro.
 
 ## Alternativas descartadas
 

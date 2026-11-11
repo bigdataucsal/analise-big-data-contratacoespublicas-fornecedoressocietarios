@@ -175,9 +175,25 @@ Onde cada condição está implementada hoje:
 |---|---|---|---|
 | publicação no período | sim, pela coleta | sim, pela coleta | implementada |
 | valor maior que zero | sim, no valor bruto do JSON (2.005.313 contratos) | sim, em centavos (2.005.068) | implementada; os 245 de diferença estão explicados acima |
-| até um bilhão | sim, como exclusão | sim, como exclusão | a marca no Parquet (D3) entra na Fase 2; hoje os 243 estão no CSV de auditoria |
-| não ser receita | não | não; o campo está no Parquet e na fato | Fase 2 (D9) |
+| até um bilhão | sim, como exclusão | sim, como marca `contrato_suspeito` | implementada em 10/11/2026 (D3); o contrato continua no Parquet |
+| não ser receita | não | sim, na marca `elegivel_valor` | implementada em 10/11/2026 (D9) |
 | não estar anulado ou cancelado | não | não | sem campo na coleta (D6) |
+
+Desde 10/11/2026 o tratamento grava três colunas booleanas em vez de deixar a
+decisão para quem consome: `contrato_suspeito` (acima de R$ 1 bilhão),
+`acima_sensibilidade` (acima de R$ 100 milhões, para a rodada de sensibilidade
+da D3) e `elegivel_valor`, que é a regra inteira desta seção em uma coluna. O
+contrato reprovado continua no Parquet, como a D3 e a D9 pedem: muda só o
+filtro dos indicadores de valor. As três colunas entraram também na lista
+`COLUNAS` do `carregar_aiven.py` e no `schema_postgres.sql`, e há teste que
+falha se as três saírem de sincronia.
+
+Conferido contra a amostra de janeiro em
+`docs/evidencias/marcacao_rn02_amostra_janeiro.txt`: a marca pega os mesmos 26
+contratos com 98,74% do valor que esta regra já citava como 98,7%, e a mediana
+com valor maior que zero dá os mesmos R$ 4.260,00. A razão entre média e
+mediana sem o corte dá 10.642 vezes, compatível com o "mais de 10 mil vezes"
+registrado aqui.
 
 Como a lista de raízes usou o valor bruto, ela tem 39 raízes a mais do que teria
 com a regra em centavos (239.605 contra 239.566, medido pela T2), menos de 0,02%
@@ -401,7 +417,7 @@ controle de capital, ou seja, quem é dono do que recebe recurso público, e um
 administrador contratado sem participação no capital não é dono. Já a RN-05,
 que classifica o controle da empresa por gênero, inclui a administração, porque
 ali a pergunta é sobre quem decide, e administrar é decidir. As duas regras
-usam recortes diferentes de propósito, e as visões materializadas do schema
+usam recortes diferentes, e as visões materializadas do schema
 refletem essa diferença.
 
 É esta regra que determina qual estratégia de redução de volume adotamos.
@@ -456,7 +472,7 @@ O CPF mascarado da Receita preserva os seis dígitos do meio, o que basta para
 agrupar o mesmo sócio entre empresas, que é exatamente o que a análise de rede
 precisa, sem identificar a pessoa.
 
-Vale registrar que essa máscara não é escolha da Receita nem nossa: o PDF de
+Essa máscara não é escolha da Receita nem nossa: o PDF de
 metadados do CNPJ declara que o CPF é descaracterizado por ocultação dos três
 primeiros dígitos e dos dois dígitos verificadores, citando o art. 129 § 2º da
 Lei nº 13.473/2017, a LDO de 2018. O dado já chega desidentificado por

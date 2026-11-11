@@ -1,53 +1,4 @@
-"""
-Tradução do código de município da Receita Federal para o código do IBGE.
-=====================================================================
-Fecha a única junção do modelo estrela que não tinha chave.
-
-O problema
-----------
-Três fontes, duas codificações de município:
-
-    PNCP            traz codigoIbge (7 dígitos)          -> IBGE
-    Censo / SIDRA   traz o código do município           -> IBGE
-    Receita         traz código PRÓPRIO na coluna 21      -> Receita
-
-O `dim_municipio` do modelo estrela é chaveado por código IBGE, porque é o
-que duas das três fontes falam. Sem tradução, a coluna
-`dim_fornecedor.id_municipio_sede` não tem como ser preenchida, e a RN-06,
-que atribui a composição racial do território à empresa, não fecha.
-
-A tabela de domínio de municípios da Receita (MUNICCSV) traz apenas código e
-descrição. Ela não tem o código do IBGE, e não há tabela de correspondência
-publicada junto com o conjunto.
-
-A solução
----------
-Casar por nome, desambiguando por UF.
-
-O nome sozinho não basta: há 5.570 municípios e muitos repetem nome entre
-estados. Mas o arquivo de estabelecimentos traz UF (coluna 20) e código de
-município da Receita (coluna 21) na mesma linha, então dá para descobrir em
-que UF cada código da Receita ocorre e restringir o casamento a ela.
-
-A normalização derruba acento, caixa, hífen e apóstrofo, que é onde as duas
-grafias divergem: "Alta Floresta D'Oeste" contra "ALTA FLORESTA DOESTE",
-"Santa Bárbara d'Oeste" contra "SANTA BARBARA DOESTE".
-
-Casos que sobrarem sem par são reportados, não silenciados. Uma tradução
-incompleta que se apresenta como completa contamina o proxy territorial
-inteiro sem dar sinal.
-
-Uso (rodar de dentro de etl/):
-    python traduzir_municipios.py                # usa o que houver em disco
-    python traduzir_municipios.py --so-conferir  # não grava, só mede cobertura
-
-Entrada:
-    dados/proxy/cor_raca_municipio_2022.csv   lado IBGE (nome e UF)
-    dados/raw/receita/*.zip                   lado Receita (MUNICCSV e ESTABELE)
-
-Saída:
-    dados/proxy/municipios_receita_ibge.csv   codigo_receita, codigo_ibge, ...
-"""
+"""Traduz o codigo de municipio da Receita Federal para o codigo do IBGE."""
 
 import argparse
 import re
@@ -64,19 +15,6 @@ SAIDA = Path(config.DIR_DADOS_PARQUET).parent / "proxy" / "municipios_receita_ib
 
 
 def normalizar(nome: str) -> str:
-    """Forma canônica para comparar nomes de município.
-
-    Sem acento, sem caixa, sem pontuação, sem espaço duplo. É onde as grafias
-    da Receita e do IBGE divergem sem divergir de verdade.
-
-    O apóstrofo é APAGADO, não trocado por espaço, e essa distinção não é
-    detalhe: o IBGE escreve "Alta Floresta D'Oeste" e a Receita escreve
-    "ALTA FLORESTA DOESTE". Trocando por espaço sairia "D OESTE" de um lado e
-    "DOESTE" do outro, e os dois não casariam. Brasil tem dezenas de
-    municípios assim, os "d'Oeste", "d'Água" e "D'Ávila", então o erro
-    derrubaria uma faixa inteira. O hífen, ao contrário, vira espaço, porque
-    é assim que a divergência aparece: "Mogi Mirim" contra "MOGI-MIRIM".
-    """
     if not nome:
         return ""
     sem_acento = unicodedata.normalize("NFKD", str(nome))
@@ -87,12 +25,6 @@ def normalizar(nome: str) -> str:
 
 
 def carregar_ibge() -> dict:
-    """Lado IBGE: (nome normalizado, UF) -> código IBGE.
-
-    Vem do arquivo do Censo que o baixar_proxy_racial.py já produz, onde o
-    município aparece como "Alta Floresta D'Oeste - RO". Evita uma chamada de
-    API só para pegar uma lista que já está em disco.
-    """
     if not ARQUIVO_IBGE.is_file():
         raise SystemExit(
             f"ERRO: {ARQUIVO_IBGE} não existe.\n"
@@ -116,12 +48,6 @@ def carregar_ibge() -> dict:
 
 
 def carregar_receita():
-    """Lado Receita: código -> nome, e código -> conjunto de UFs onde ocorre.
-
-    O nome sai do MUNICCSV. As UFs saem do arquivo de estabelecimentos, que
-    é onde UF e código de município convivem na mesma linha. Sem esse segundo
-    passo o casamento por nome fica ambíguo entre estados.
-    """
     import pandas as pd
 
     zips = sorted(DIR_RECEITA.glob("*.zip"))
@@ -183,15 +109,12 @@ def main() -> int:
     print(f"   lado Receita: {len(nomes)} códigos no MUNICCSV, "
           f"{len(ufs)} com UF observada nos estabelecimentos")
 
-    # --- casamento ---
     pares, sem_uf, sem_par, ambiguos = [], [], [], []
     for codigo, nome in sorted(nomes.items()):
         alvo = normalizar(nome)
         candidatas = ufs.get(codigo, set())
 
         if not candidatas:
-            # Código que não aparece em nenhum estabelecimento do recorte.
-            # Não é erro: simplesmente não precisamos dele.
             sem_uf.append((codigo, nome))
             continue
 
