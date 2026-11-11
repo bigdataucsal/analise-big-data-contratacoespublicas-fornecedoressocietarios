@@ -12,9 +12,23 @@ Os testes rodam de dentro de `etl/`, sem dependência além do que o
 cd etl && python -m unittest discover -s testes -t . -v
 ```
 
-São 98 testes, todos passando em 10/11/2026. A CI os executa em cada pull
+São 112 testes, todos passando em 10/11/2026. A CI os executa em cada pull
 request para a `main`, no passo "Testar as regras de negocio" de
 `.github/workflows/ci-etl.yml`.
+
+A conferência independente dos indicadores é o `etl/auditar_kpis.py`. Ele não
+lê visão materializada nem painel: vai no Parquet, aplica os módulos de
+`etl/regras/` e compara com os números publicados, saindo com código 1 quando
+alguma coisa diverge além da tolerância. Serve de porta antes da defesa.
+
+```bash
+cd etl && python auditar_kpis.py --amostra
+```
+
+A saída sobre a amostra de janeiro está em
+`docs/evidencias/auditoria_kpis_amostra_janeiro.txt`: 20.000 linhas conferidas
+uma a uma entre o SQL do tratamento e o módulo de elegibilidade, com zero
+divergência.
 
 ## Tabela
 
@@ -30,11 +44,42 @@ request para a `main`, no passo "Testar as regras de negocio" de
 | RN-08 Sanção na data | §RN-08 | `etl/regras/sancoes.py` | `TestRN08Sancoes` | 10 | regra em código pela primeira vez; depende do CEIS e do CNEP (T2) |
 | RN-09 Anonimização e mínimo de agregação | §RN-09 | `etl/regras/anonimizacao.py` | `TestRN09Anonimizacao` | 11 | regra em código pela primeira vez; falta aplicar na camada do painel (T4) |
 
-Duas classes de teste não pertencem a uma regra só. `TestTratamentoSQL` executa
-a consulta de tratamento no DuckDB sobre uma amostra sintética de dez
+Quatro classes de teste não pertencem a uma regra só. `TestTratamentoSQL`
+executa a consulta de tratamento no DuckDB sobre uma amostra sintética de dez
 contratos e confere RN-01 e RN-02 contra os módulos, além da tipagem, da
-normalização de booleanos e da deduplicação. `TestSQLSemComentarioQuebrado`
-é regressão do defeito descrito abaixo.
+normalização de booleanos e da deduplicação. `TestContratoComOCarregador`
+confere que o cabeçalho do `SELECT` do tratamento, a lista `COLUNAS` do
+`carregar_aiven.py` e o `schema_postgres.sql` continuam de acordo — a carga
+valida isso em tempo de execução e o teste antecipa a descoberta.
+`TestSQLSemComentarioQuebrado` é regressão do defeito descrito abaixo. E
+`TestDivergenciaVisaoKPI` mede a diferença entre a `mv_kpi_genero_setor` e a
+RN-05, descrita na seção seguinte.
+
+## A visão do KPI não aplica a RN-05 inteira, e a diferença está medida
+
+A RN-05 já registrava que a `mv_kpi_genero_setor` de `etl/schema_estrela.sql`
+divergia da regra. `testes/test_divergencia_visao_kpi.py` transcreve o `CASE`
+da visão para Python e roda os dois critérios sobre os mesmos quadros
+societários. São duas divergências, nas duas direções que importam:
+
+1. **A visão ignora o sócio pessoa jurídica.** O `LATERAL` filtra
+   `identificador_tipo = 2`, de modo que o sócio PJ não entra na contagem e
+   também não aciona regra nenhuma. Uma empresa com três sócias e um sócio PJ
+   no quadro é "feminino" na visão e `misto_ou_indeterminado` pela RN-05, que
+   manda não classificar cadeia societária sem resolver a cadeia.
+2. **A visão não tem classe para a empresa sem sócio na base.** As 65.001
+   empresas da D5, 27,1% do recorte, caem no mesmo balde das mistas, e na tela
+   não é possível distinguir controle indefinido de controle não inferível.
+
+A direção do erro é conhecida e está fixada em teste: nos casos em que
+discordam, a visão devolve classe definida onde a regra devolve misto, nunca o
+contrário. Logo **o denominador do KPI calculado pela visão é maior ou igual ao
+da regra**, e o percentual de controle feminino publicado a partir da visão não
+é comparável ao dos 30,4% que vieram do `classificar_empresas.py`.
+
+Enquanto a visão não for alinhada, os números publicados devem continuar vindo
+do script, como a RN-05 já determina. Quando for alinhada, é esse mesmo teste
+que mostra que acabou.
 
 ## O que cada regra prova, em uma linha
 
