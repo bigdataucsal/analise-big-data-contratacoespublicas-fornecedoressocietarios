@@ -1,4 +1,4 @@
-"""Todo script de extracao (PNCP, Portal da Transparencia, Receita) importa"""
+"""Datas e parametros do recorte, compartilhados por todos os extratores."""
 
 ANO_REFERENCIA = 2025
 DATA_INICIAL_PNCP = "20250101"

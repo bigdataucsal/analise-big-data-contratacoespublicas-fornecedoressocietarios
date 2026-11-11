@@ -48,7 +48,7 @@ def preparar(con, escala: int = 1):
             SELECT numero_controle_pncp || '-' || r.i AS numero_controle_pncp,
                    codigo_ibge, cnpj_raiz_fornecedor, valor_global, ano_contrato
             FROM tratado, range({escala}) AS r(i)
-            WHERE valor_global > 0 AND valor_global <= 1e9, corte de sanidade
+            WHERE valor_global > 0 AND valor_global <= 1e9
         ) TO '{DIR_BENCH}/fato.parquet' (FORMAT PARQUET, COMPRESSION ZSTD)
     """)
     con.execute(f"""

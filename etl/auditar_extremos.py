@@ -1,4 +1,4 @@
-"""auditar_extremos.py"""
+"""Audita os contratos de valor extremo do Parquet de contratos do PNCP."""
 import argparse
 import os
 

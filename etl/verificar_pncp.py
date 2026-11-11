@@ -1,4 +1,4 @@
-"""verificar_pncp.py  (v2)"""
+"""Compara o JSONL coletado do PNCP com o totalRegistros da API, dia a dia."""
 import argparse
 import csv
 import json

@@ -1,4 +1,4 @@
-"""diagnostico_valores.py"""
+"""Olha o Parquet de contratos: colunas, maiores valores, concentracao do valor e tamanho dos universos PJ e PF."""
 import argparse
 
 import duckdb

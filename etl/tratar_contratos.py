@@ -82,8 +82,6 @@ tipado AS (
         TRY_CAST(dataVigenciaInicio    AS DATE)              AS data_vigencia_inicio,
         TRY_CAST(dataVigenciaFim       AS DATE)              AS data_vigencia_fim,
 
-        -- Dinheiro em DECIMAL, nunca em float: somatorio de 2 milhoes de
-        -- contratos em DOUBLE acumula erro de arredondamento visivel.
         TRY_CAST(valorInicial   AS DECIMAL(18,2))            AS valor_inicial,
         TRY_CAST(valorGlobal    AS DECIMAL(18,2))            AS valor_global,
         TRY_CAST(valorParcela   AS DECIMAL(18,2))            AS valor_parcela,
@@ -91,16 +89,11 @@ tipado AS (
         numeroParcelas                                       AS numero_parcelas,
         numeroRetificacao                                    AS numero_retificacao,
 
-        -- Identificador do fornecedor: sempre texto. Virar numero comeria o
-        -- zero a esquerda de CNPJ como 00394429000102.
         nullif(trim(niFornecedor), '')                       AS ni_fornecedor,
         upper(nullif(trim(tipoPessoa), ''))                  AS tipo_pessoa,
         regexp_replace(trim(nomeRazaoSocialFornecedor), '\\s+', ' ', 'g')
                                                              AS nome_fornecedor,
         nullif(trim(codigoPaisFornecedor), '')               AS codigo_pais_fornecedor,
-        -- Raiz do CNPJ (8 primeiros digitos): identifica a empresa por tras de
-        -- matriz e filiais. E por ela que o cruzamento societario com a Receita
-        -- se sustenta, o CNPJ completo separaria filiais do mesmo grupo.
         CASE WHEN upper(trim(tipoPessoa)) = 'PJ'
                   AND length(regexp_replace(niFornecedor, '[^0-9]', '', 'g')) = 14
              THEN left(regexp_replace(niFornecedor, '[^0-9]', '', 'g'), 8)
@@ -131,9 +124,6 @@ tipado AS (
         categoriaProcesso.id                                 AS categoria_processo_id,
         categoriaProcesso.nome                               AS categoria_processo_nome,
 
-        -- No bruto esses booleanos vem nulos quando sao falsos (98% de nulo).
-        -- Normalizar evita que "IS NOT TRUE" e "= FALSE" deem respostas
-        -- diferentes na filtragem la no Aiven.
         coalesce(receita, FALSE)                             AS receita,
         coalesce(emendaParlamentar, FALSE)                   AS emenda_parlamentar,
         coalesce(frutoAdesao, FALSE)                         AS fruto_adesao,
@@ -157,7 +147,7 @@ deduplicado AS (
 )
 SELECT
     *,
-    strftime(data_publicacao, '%Y-%m') AS ano_mes, chave de particao
+    strftime(data_publicacao, '%Y-%m') AS ano_mes
 FROM deduplicado
 """
 

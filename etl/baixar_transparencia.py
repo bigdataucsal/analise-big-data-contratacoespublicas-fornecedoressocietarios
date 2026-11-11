@@ -1,4 +1,4 @@
-"""Uso (rodar de dentro de etl/):"""
+"""Extrator de contratos do Portal da Transparencia (API da CGU)."""
 
 import json
 import os

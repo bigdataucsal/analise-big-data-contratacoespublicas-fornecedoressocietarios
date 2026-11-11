@@ -1,4 +1,6 @@
-"""Teste comparativo S2: a mesma junção (empresas x sócios) rodada em Pandas sobre CSV e em"""
+"""Teste comparativo S2: a mesma junção (empresas x sócios) rodada em Pandas sobre CSV e em
+PostgreSQL (Aiven), com os dois tempos cronometrados. É o que transforma a escolha do banco
+em evidência."""
 from __future__ import annotations
 
 import argparse

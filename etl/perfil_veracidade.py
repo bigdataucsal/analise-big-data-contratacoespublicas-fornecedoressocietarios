@@ -1,4 +1,4 @@
-"""perfil_veracidade.py"""
+"""Recalcula no ano inteiro os percentuais que o docs/5-vs.md mediu so na amostra de janeiro."""
 import argparse
 
 import duckdb

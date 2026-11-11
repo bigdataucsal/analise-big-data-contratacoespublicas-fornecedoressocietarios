@@ -64,6 +64,8 @@ CREATE TABLE IF NOT EXISTS contratos (
 );
 
 
+-- 2. Indices
+
 CREATE INDEX IF NOT EXISTS ix_contratos_ni_fornecedor
     ON contratos (ni_fornecedor);
 CREATE INDEX IF NOT EXISTS ix_contratos_cnpj_raiz
@@ -83,3 +85,5 @@ CREATE INDEX IF NOT EXISTS ix_contratos_valor_global
 CREATE EXTENSION IF NOT EXISTS pg_trgm;
 CREATE INDEX IF NOT EXISTS ix_contratos_objeto_trgm
     ON contratos USING GIN (objeto_contrato gin_trgm_ops);
+
+-- 3. Exemplos
