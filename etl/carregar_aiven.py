@@ -25,6 +25,7 @@ COLUNAS = [
     "categoria_processo_nome", "receita", "emenda_parlamentar", "fruto_adesao",
     "tem_remanejamento", "objeto_contrato", "informacao_complementar",
     "identificador_cipi",
+    "contrato_suspeito", "acima_sensibilidade", "elegivel_valor",
 ]
 
 

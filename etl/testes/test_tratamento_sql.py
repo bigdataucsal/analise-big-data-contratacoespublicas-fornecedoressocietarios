@@ -185,6 +185,85 @@ class TestTratamentoSQL(unittest.TestCase):
         self.assertIsInstance(valor, str)
         self.assertTrue(valor.startswith("00"))
 
+    def test_rn02_marca_o_suspeito_sem_apagar(self):
+        linha = self.uma("acima-do-bilhao",
+                         "contrato_suspeito, elegivel_valor, valor_global")
+        self.assertIsNotNone(linha, "o contrato acima do bilhao foi apagado")
+        suspeito, elegivel, valor = linha
+        self.assertTrue(suspeito)
+        self.assertFalse(elegivel)
+        self.assertEqual(valor, Decimal("2000000000.00"))
+
+    def test_rn02_contrato_de_receita_fica_inelegivel_mas_presente(self):
+        linha = self.uma("contrato-de-receita",
+                         "elegivel_valor, contrato_suspeito, receita")
+        self.assertIsNotNone(linha)
+        elegivel, suspeito, receita = linha
+        self.assertFalse(elegivel)
+        self.assertFalse(suspeito)
+        self.assertTrue(receita)
+
+    def test_rn02_valor_zerado_nao_e_elegivel(self):
+        self.assertFalse(
+            self.uma("valor-menor-que-meio-centavo", "elegivel_valor")[0])
+
+    def test_rn02_contrato_normal_e_elegivel(self):
+        linha = self.uma("00000000000000-1-000001/2025",
+                         "elegivel_valor, contrato_suspeito, acima_sensibilidade")
+        self.assertEqual(linha, (True, False, False))
+
+    def test_rn02_sensibilidade_de_cem_milhoes_e_independente_do_corte(self):
+        linha = self.uma("acima-do-bilhao", "acima_sensibilidade")
+        self.assertTrue(linha[0])
+
+    def test_rn02_as_marcas_do_sql_concordam_com_o_modulo(self):
+        linhas = self.con.execute(
+            "SELECT valor_global, receita, contrato_suspeito, "
+            "acima_sensibilidade, elegivel_valor FROM tratado").fetchall()
+        for valor, receita, suspeito, sensivel, elegivel in linhas:
+            esperado = elegibilidade.marcar(valor, receita)
+            self.assertEqual(suspeito, esperado["contrato_suspeito"])
+            self.assertEqual(sensivel, esperado["acima_sensibilidade"])
+            self.assertEqual(elegivel, esperado["elegivel_valor"])
+
+
+class TestContratoComOCarregador(unittest.TestCase):
+    """O carregar_aiven.py confere o cabecalho do CSV contra a sua lista.
+
+    Mudar o SELECT do tratamento sem mudar a lista derruba a carga com uma
+    mensagem que pede justamente isto: atualizar COLUNAS e o
+    schema_postgres.sql junto. O teste faz essa conferencia antes.
+    """
+
+    def test_cabecalho_do_select_bate_com_colunas_do_carregador(self):
+        import carregar_aiven
+
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        jsonl = Path(tmp.name) / "um.jsonl"
+        jsonl.write_text(json.dumps(CONTRATO_BASE) + "\n", encoding="utf-8")
+
+        con = duckdb.connect()
+        self.addCleanup(con.close)
+        sql = tratar_contratos.montar_sql([str(jsonl).replace("\\", "/")])
+        colunas = [c[0] for c in con.execute(
+            f"SELECT * FROM ({sql}) LIMIT 0").description]
+
+        esperadas = list(carregar_aiven.COLUNAS) + ["ano_mes"]
+        self.assertEqual(
+            colunas, esperadas,
+            "o SELECT do tratamento e a lista COLUNAS do carregar_aiven.py "
+            "sairam de sincronia")
+
+    def test_schema_postgres_declara_as_colunas_do_carregador(self):
+        import carregar_aiven
+
+        ddl = Path("schema_postgres.sql").read_text(encoding="utf-8")
+        corpo = ddl.split("-- 2. Indices")[0]
+        for coluna in carregar_aiven.COLUNAS:
+            self.assertIn(coluna, corpo,
+                          f"{coluna} nao esta declarada no schema_postgres.sql")
+
 
 class TestSQLSemComentarioQuebrado(unittest.TestCase):
 

@@ -60,6 +60,10 @@ CREATE TABLE IF NOT EXISTS contratos (
     informacao_complementar   TEXT,
     identificador_cipi        TEXT,
 
+    contrato_suspeito         BOOLEAN,
+    acima_sensibilidade       BOOLEAN,
+    elegivel_valor            BOOLEAN,
+
     ano_mes TEXT GENERATED ALWAYS AS (to_char(data_publicacao, 'YYYY-MM')) STORED
 );
 

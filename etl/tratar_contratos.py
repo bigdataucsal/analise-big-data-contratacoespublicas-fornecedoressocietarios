@@ -147,6 +147,11 @@ deduplicado AS (
 )
 SELECT
     *,
+    coalesce(valor_global > 1000000000.00, FALSE)        AS contrato_suspeito,
+    coalesce(valor_global > 100000000.00, FALSE)         AS acima_sensibilidade,
+    coalesce(valor_global > 0
+             AND valor_global <= 1000000000.00
+             AND NOT receita, FALSE)                     AS elegivel_valor,
     strftime(data_publicacao, '%Y-%m') AS ano_mes
 FROM deduplicado
 """
