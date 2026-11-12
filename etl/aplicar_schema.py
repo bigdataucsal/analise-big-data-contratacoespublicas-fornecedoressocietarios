@@ -3,17 +3,18 @@ Aplica o schema_estrela.sql consolidado (T2) no Aiven e confere o dicionario
 de dados contra o banco real (information_schema).
 
 O que faz, em ordem:
-  1. Migra o desenho antigo: se a fato antiga existir (coluna id_tempo_publicacao),
-     descarta as views e as tabelas dim_tempo, dim_orgao, dim_unidade,
-     dim_tipo_contrato, dim_categoria_processo e a fato antiga.
-     Se a fato antiga tiver linhas, so descarta com --forcar.
-  2. Cria as tabelas, os indices e as views (tudo IF NOT EXISTS).
-  3. Compara colunas, tipos e nulidade com o dicionario e lista PK/FK/UNIQUE.
+  1. Descarta as duas views materializadas do desenho antigo, se existirem.
+  2. Migra o desenho antigo da fato: se a fato existente nao tiver as 5 colunas
+     novas, descarta a fato e as dimensoes que sairam (dim_tempo, dim_orgao,
+     dim_unidade, dim_tipo_contrato, dim_categoria_processo). Se a fato antiga
+     tiver linhas, so descarta com --forcar.
+  3. Cria as tabelas, os indices e as tabelas de agregado (tudo IF NOT EXISTS).
+     Os agregados ficam vazios: quem os preenche e o construir_agregados.py.
+  4. Compara colunas, tipos e nulidade com o dicionario e lista PK/FK/UNIQUE.
 
 Uso (de dentro de etl/):
     python aplicar_schema.py --simular     # nao conecta
     python aplicar_schema.py
-    python aplicar_schema.py --recriar-views
     python aplicar_schema.py --forcar
 """
 import argparse
@@ -27,14 +28,15 @@ import config   # tambem carrega o etl/.env
 SQL = Path(__file__).resolve().parent / "schema_estrela.sql"
 MARC_INDICES = "-- 4. Indices"
 MARC_AGREGADOS = "-- 5. Agregados"
+MINIMO_INDICES_CI = 10
 
 ANTIGAS = ["dim_unidade", "dim_orgao", "dim_tempo",
            "dim_tipo_contrato", "dim_categoria_processo"]
-VIEWS = ["mv_kpi_genero_setor", "mv_concentracao_socio"]
+VIEWS_ANTIGAS = ["mv_kpi_genero_setor", "mv_concentracao_socio"]
 
 # tabela -> {coluna: (data_type do information_schema, is_nullable)}
 ESPERADO = {
-        "fato_contrato": {
+    "fato_contrato": {
         "numero_controle_pncp": ("text", "NO"),
         "codigo_ibge": ("text", "YES"),
         "cnpj_raiz_fornecedor": ("text", "YES"),
@@ -83,6 +85,24 @@ ESPERADO = {
         "grupo_qualificacao": ("text", "YES"),
         "competencia": ("text", "NO"),
     },
+    "agg_kpi_genero_setor": {
+        "ano_contrato": ("smallint", "NO"),
+        "cnae_principal": ("text", "NO"),
+        "uf_sigla": ("text", "NO"),
+        "faixa_pct_negra": ("text", "NO"),
+        "genero_controle": ("text", "NO"),
+        "contratos": ("bigint", "NO"),
+        "valor_total": ("numeric", "NO"),
+    },
+    "agg_concentracao_socio": {
+        "id_socio": ("integer", "NO"),
+        "empresas": ("integer", "NO"),
+        "contratos": ("bigint", "NO"),
+        "valor_controlado": ("numeric", "NO"),
+        "soma_sobreposta": ("boolean", "NO"),
+        "identificador_pub": ("text", "NO"),
+        "genero": ("text", "YES"),
+    },
 }
 
 
@@ -93,8 +113,8 @@ def secoes():
             raise SystemExit(f"ERRO: o marcador {marcador!r} deve aparecer exatamente "
                              f"uma vez no schema_estrela.sql")
     tabelas, resto = ddl.split(MARC_INDICES)
-    indices, views = resto.split(MARC_AGREGADOS)
-    return tabelas, indices, views
+    indices, agregados = resto.split(MARC_AGREGADOS)
+    return tabelas, indices, agregados
 
 
 def migrar(cur, forcar: bool) -> None:
@@ -108,9 +128,7 @@ def migrar(cur, forcar: bool) -> None:
     if n > 0 and not forcar:
         raise SystemExit(f"ERRO: a fato existente tem desenho antigo e {n:,} linhas. Para descartar "
                          f"mesmo assim, rodem com --forcar (os contratos precisarao ser recarregados).")
-    print(f"-- migracao: descartando fato de desenho antigo ({n:,} linhas), views e dimensoes que sairam")
-    for v in VIEWS:
-        cur.execute(f"DROP MATERIALIZED VIEW IF EXISTS {v}")
+    print(f"-- migracao: descartando fato de desenho antigo ({n:,} linhas) e dimensoes que sairam")
     cur.execute("DROP TABLE IF EXISTS fato_contrato")
     for t in ANTIGAS:
         cur.execute(f"DROP TABLE IF EXISTS {t}")
@@ -146,12 +164,18 @@ def conferir(cur) -> bool:
             "FROM pg_constraint WHERE connamespace = 'public'::regnamespace "
             "AND contype IN ('p', 'f', 'u') ORDER BY 1, 2, 3").fetchall():
         nome = {"p": "PK", "f": "FK", "u": "UNIQUE"}[tipo]
-        print(f"   {tabela:<22} {nome:<7} {definicao}")
+        print(f"   {tabela:<24} {nome:<7} {definicao}")
+
+    n_ix = cur.execute("SELECT count(*) FROM pg_indexes WHERE schemaname = current_schema() "
+                       "AND indexname LIKE 'ix_%'").fetchone()[0]
+    print(f"\n-- indices ix_*: {n_ix} (o CI exige no minimo {MINIMO_INDICES_CI})")
+    if n_ix < MINIMO_INDICES_CI:
+        tudo_ok = False
 
     print("\n-- linhas por tabela")
     for tabela in ESPERADO:
         n = cur.execute(f"SELECT count(*) FROM {tabela}").fetchone()[0]
-        print(f"   {tabela:<22} {n:>12,}")
+        print(f"   {tabela:<24} {n:>12,}")
     return tudo_ok
 
 
@@ -159,19 +183,18 @@ def main() -> int:
     p = argparse.ArgumentParser(description="Aplica o schema estrela consolidado no Aiven")
     p.add_argument("--simular", action="store_true", help="nao conecta; mostra o que seria aplicado")
     p.add_argument("--forcar", action="store_true", help="descarta a fato antiga mesmo com linhas")
-    p.add_argument("--sem-views", action="store_true", help="nao cria as views materializadas")
-    p.add_argument("--recriar-views", action="store_true", help="derruba e recria as views")
     p.add_argument("--uri", default=None)
     a = p.parse_args()
 
-    tabelas, indices, views = secoes()
+    tabelas, indices, agregados = secoes()
 
     if a.simular:
+        nomes_ix = (re.findall(r"CREATE (?:UNIQUE )?INDEX IF NOT EXISTS (ix_\w+)", indices + agregados)
+                    + re.findall(r"CONSTRAINT (ix_\w+)", agregados))
         print("== Simulacao (nao conecta) ==")
-        print("   tabelas :", ", ".join(re.findall(r"CREATE TABLE IF NOT EXISTS (\w+)", tabelas)))
-        print(f"   indices : {len(re.findall(r'CREATE INDEX', indices))}")
-        print("   views   :", ", ".join(re.findall(
-            r"CREATE MATERIALIZED VIEW IF NOT EXISTS (\w+)", views)))
+        print("   tabelas :", ", ".join(re.findall(r"CREATE TABLE IF NOT EXISTS (\w+)",
+                                                  tabelas + agregados)))
+        print(f"   indices ix_*: {len(nomes_ix)} (o CI exige no minimo {MINIMO_INDICES_CI})")
         return 0
 
     uri = a.uri or os.environ.get("AIVEN_PG_URI")
@@ -187,6 +210,8 @@ def main() -> int:
         if cur.execute("SHOW default_transaction_read_only").fetchone()[0] == "on":
             raise SystemExit("ERRO: o banco esta em somente leitura (disco cheio?). "
                              "Confira o painel da Aiven.")
+        for v in VIEWS_ANTIGAS:
+            cur.execute(f"DROP MATERIALIZED VIEW IF EXISTS {v}")
         migrar(cur, a.forcar)
         con.commit()
 
@@ -200,13 +225,9 @@ def main() -> int:
         cur.execute(indices)
         con.commit()
 
-        if not a.sem_views:
-            if a.recriar_views:
-                for v in VIEWS:
-                    cur.execute(f"DROP MATERIALIZED VIEW IF EXISTS {v}")
-            print("-- views materializadas")
-            cur.execute(views)
-            con.commit()
+        print("-- agregados (tabelas vazias)")
+        cur.execute(agregados)
+        con.commit()
 
         ok = conferir(cur)
     print("\n== Schema aplicado" + ("" if ok else " COM DIVERGENCIAS") + " ==")

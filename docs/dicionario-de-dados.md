@@ -2,8 +2,9 @@
 
 Descreve o modelo estrela consolidado no PostgreSQL da Aiven (T2): uma fato
 reduzida de cinco colunas, as duas dimensões obrigatórias (`dim_fornecedor` e
-`dim_municipio`) e as duas tabelas da relação entre empresa e sócio
-(`dim_socio` e `ponte_empresa_socio`). A definição está em
+`dim_municipio`), as duas tabelas da relação entre empresa e sócio (`dim_socio` e
+`ponte_empresa_socio`) e dois agregados materializados para o painel
+(`agg_kpi_genero_setor` e `agg_concentracao_socio`). A definição está em
 `etl/schema_estrela.sql`, e o `etl/aplicar_schema.py` confere este dicionário
 contra o `information_schema` do banco. É um dos itens obrigatórios do README
 segundo o guia do projeto.
@@ -64,6 +65,8 @@ erDiagram
 | `dim_municipio` | dimensão | município, código IBGE de 7 dígitos | `id_municipio` |
 | `dim_socio` | dimensão de apoio | sócio distinto | `id_socio` |
 | `ponte_empresa_socio` | ponte, muitos para muitos | vínculo entre empresa, sócio, qualificação e competência | `(id_fornecedor, id_socio, qualificacao, competencia)` |
+| `agg_kpi_genero_setor` | agregado | ano do contrato, CNAE, UF, faixa de `pct_negra` e controle da empresa | `(ano_contrato, uf_sigla, genero_controle, faixa_pct_negra, cnae_principal)` |
+| `agg_concentracao_socio` | agregado | sócio pessoa física ligado a 2 ou mais empresas com contrato | `id_socio` |
 
 ## fato_contrato
 
@@ -95,18 +98,19 @@ usou uma `dim_fornecedor` de três colunas, e a real tem dez.
 
 A fato é reduzida de propósito, e o que saiu dela tem consequência. Sem a flag
 `receita`, a exclusão dos contratos de receita (RN-02, decisão D9) não pode ser
-aplicada pelas visões: eles entram nos totais, cerca de 1,02% dos contratos e 1,6%
+aplicada pelos agregados: eles entram nos totais, cerca de 1,02% dos contratos e 1,6%
 do valor, até a fato da Fase 2 trazer a coluna. Sem data de publicação, o único
 eixo de tempo é `ano_contrato`, e o filtro de 2025 por publicação é feito no
 Parquet antes da carga. Os atributos de órgão, unidade, tipo e categoria também
 ficam só no Parquet.
 
-Regras que o carregador da fato deve seguir, a confirmar pelo grupo, porque o
-carregador ainda não existe. Contrato sem raiz de CNPJ entra com
-`cnpj_raiz_fornecedor` nulo. Raiz que não existe na Receita (5 das 239.605 da
-lista atual) entra em `dim_fornecedor` só com `cnpj_raiz`, e os atributos ficam
-nulos, para a chave estrangeira não falhar. Código IBGE ausente de
-`dim_municipio` vira nulo.
+O carregador é o `etl/carregar_fato.py`, que lê `etl/dados/benchmark/fato.parquet`,
+a fato de 2.005.068 contratos medida no benchmark. Contrato sem raiz de CNPJ entra
+com `cnpj_raiz_fornecedor` nulo. Raiz que não existe na Receita entra em
+`dim_fornecedor` só com `cnpj_raiz` e os atributos nulos, para a chave estrangeira
+não falhar. Código IBGE ausente de `dim_municipio` vira nulo. Os dois índices da
+fato são derrubados antes da carga e recriados no fim. A carga é idempotente e
+vai em lotes de 100 mil linhas.
 
 Duas notas de qualidade sobre os dados desta tabela.
 
@@ -179,7 +183,7 @@ município a mais, Boa Esperança do Norte (MT, código 5101837), que não const
 tabela, provavelmente porque foi instalado depois do Censo (a confirmar). Um
 contrato de órgão desse município fica com `codigo_ibge` nulo na fato. Se o PNCP
 usar esse código, o carregador aceita `--completar-localidades`, que o inclui
-com populações e `pct_negra` nulos, e as visões o classificam como `sem dado`.
+com populações e `pct_negra` nulos, e os agregados o classificam como `sem dado`.
 
 Duas armadilhas registradas. A primeira: o código de município da Receita
 Federal não é o código do IBGE, e ligar a sede da empresa a esta tabela exige
@@ -243,25 +247,41 @@ titular que aparece como 65, como o de EIRELI. O empresário individual e o MEI
 não aparecem no arquivo de sócios em código nenhum (ver RN-03 e RN-05). Os
 grupos estão enumerados na RN-03.
 
-## Visões materializadas
+## Agregados materializados
 
-O painel lê só estas visões (ver `docs/escolha-do-banco.md`). Depois de carregar
-contratos ou de classificar o gênero, é preciso rodar `REFRESH MATERIALIZED VIEW`
-em cada uma, e o primeiro refresh com a fato carregada deve ser feito com o
-painel de uso do nó aberto, porque uma consulta sobre a fato inteira já derrubou
-o nó gratuito.
+O painel lê só estas duas tabelas, e nunca a fato diretamente (ver `docs/escolha-do-banco.md`). Elas são montadas por `etl/construir_agregados.py`, em fatias e dentro de uma transação, e não por `MATERIALIZED VIEW`: o `REFRESH` de uma view é uma consulta única sobre a fato inteira, que é o tipo de consulta que derrubou o nó gratuito no benchmark. O raciocínio e o orçamento de disco estão em `docs/agregados-e-orcamento-de-disco.md`. Depois de carregar contratos ou de classificar o gênero dos sócios, é preciso rodar o script de novo.
 
-| visão | grão | serve a |
-|---|---|---|
-| `mv_kpi_genero_setor` | ano do contrato, CNAE, UF, faixa de `pct_negra` e classificação de controle da empresa | KPI 1 (participação feminina) e a camada interseccional |
-| `mv_concentracao_socio` | sócio pessoa física ligado a duas ou mais empresas com contrato (RN-07) | KPI 4 (concentração societária) |
+### agg_kpi_genero_setor
 
-A classificação de controle aplica a RN-05, incluindo as categorias `sem socio na
-base`, `misto ou indeterminado` e `nao classificado` (enquanto houver sócio sem
-gênero). A RN-02 não está aplicada: a fato não tem a flag `receita`. O
-território é o município do órgão contratante. Nenhum recorte do painel mostra
-resultado baseado em menos de cinco sócios ou cinco empresas, e esse filtro fica
-na camada de apresentação (RN-09).
+Grão: uma linha por combinação de ano do contrato, CNAE, UF, faixa de `pct_negra` e classificação de controle da empresa. Serve ao KPI 1 e à camada interseccional. O território é o município do órgão contratante.
+
+| coluna | tipo | chave | nulo | origem | observação |
+|---|---|---|---|---|---|
+| ano_contrato | SMALLINT | PK | não | `fato_contrato.ano_contrato` | `0` significa sem ano |
+| cnae_principal | TEXT | PK | não | `dim_fornecedor.cnae_principal` | `sem cnae` quando a empresa não tem matriz na Receita |
+| uf_sigla | TEXT | PK | não | `dim_municipio.uf_sigla`, por `fato_contrato.codigo_ibge` | `sem uf` quando o município do órgão não existe em `dim_municipio` |
+| faixa_pct_negra | TEXT | PK | não | derivada de `dim_municipio.pct_negra` | `alta` (70 ou mais), `media` (40 ou mais), `baixa`, ou `sem dado` |
+| genero_controle | TEXT | PK | não | derivada da RN-05 | `feminino`, `masculino`, `misto ou indeterminado`, `indeterminado`, `sem socio na base` ou `nao classificado` |
+| contratos | BIGINT | | não | contagem | contratos do grupo |
+| valor_total | NUMERIC(20,2) | | não | soma de `fato_contrato.valor_global` | em R$ |
+
+A chave primária se chama `ix_agg_kpi_genero_pk` e é composta pelas cinco colunas de grupo, o que garante o grão. Só entram contratos com `cnpj_raiz_fornecedor` preenchido (RN-01). A mediana de valor não existe nesta tabela: não é aditiva e exigiria ordenar a fato inteira. A classificação de controle aplica a RN-05, e `nao classificado` aparece enquanto algum sócio da empresa estiver sem gênero. A RN-02 não está aplicada, porque a fato não tem a flag `receita`.
+
+### agg_concentracao_socio
+
+Grão: uma linha por sócio pessoa física ligado a duas ou mais empresas com contrato (RN-07). Serve ao KPI 4.
+
+| coluna | tipo | chave | nulo | origem | observação |
+|---|---|---|---|---|---|
+| id_socio | INTEGER | PK, FK para `dim_socio` | não | `dim_socio.id_socio` | |
+| empresas | INTEGER | | não | contagem | empresas do sócio com contrato, pelos grupos participação e titularidade |
+| contratos | BIGINT | | não | soma | contratos dessas empresas |
+| valor_controlado | NUMERIC(20,2) | | não | soma de `fato_contrato.valor_global` | em R$ |
+| soma_sobreposta | BOOLEAN | | não | derivada | verdadeiro quando alguma empresa do sócio tem mais de um sócio multiempresa: o mesmo valor entra na soma de cada um |
+| identificador_pub | TEXT | | não | `dim_socio.identificador_pub` | único identificador exibível (RN-09) |
+| genero | TEXT | | sim | `dim_socio.genero` | nulo significa ainda não classificado |
+
+Existe o índice `ix_agg_concentracao` em `valor_controlado` decrescente. Nenhum recorte do painel mostra resultado baseado em menos de cinco sócios ou cinco empresas, e esse filtro fica na camada de apresentação (RN-09).
 
 ## O que ficou fora do banco
 

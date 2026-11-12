@@ -176,7 +176,7 @@ COMMENT ON COLUMN fato_contrato.codigo_ibge IS
   'inexistente em dim_municipio.';
 COMMENT ON COLUMN fato_contrato.cnpj_raiz_fornecedor IS
   'Raiz de 8 digitos do fornecedor. NULO quando o fornecedor nao tem raiz de CNPJ (pessoa fisica, '
-  'estrangeiro ou identificador irregular): 78.795 contratos, 3,9% da fato (RN-01). As visoes dos '
+  'estrangeiro ou identificador irregular): 78.795 contratos, 3,9% da fato (RN-01). Os agregados dos '
   'KPIs os deixam de fora pela propria juncao com dim_fornecedor.';
 COMMENT ON COLUMN fato_contrato.ano_contrato IS
   'Ano do contrato (PNCP anoContrato), NAO o ano da publicacao. A coleta e por data de publicacao: '
@@ -203,135 +203,66 @@ CREATE INDEX IF NOT EXISTS ix_municipio_uf    ON dim_municipio (uf_sigla);
 CREATE INDEX IF NOT EXISTS ix_socio_genero    ON dim_socio (genero);
 
 
+-- 5. Agregados materializados
 -- =====================================================================
--- 5. Agregados calculados previamente
--- =====================================================================
--- Um no gratuito com 1 GB de memoria nao sustenta consulta analitica
--- pesada a cada clique de filtro no painel. Alem da lentidao, consulta
--- com ordenacao e juncao grande gera arquivo temporario em disco, que
--- consome a MESMA cota de 1 GB -- ou seja, o painel lento tambem enche o
--- disco. Materializar resolve os dois problemas. No benchmark, uma consulta
--- sobre a fato inteira derrubou o no gratuito: o primeiro REFRESH com a
--- fato carregada deve ser feito com o painel de uso do no aberto.
+-- O painel le SO estas duas tabelas. Elas sao MONTADAS por
+-- etl/construir_agregados.py, em fatias e dentro de uma transacao, e nao por
+-- MATERIALIZED VIEW: o REFRESH de uma view e uma consulta unica sobre a fato
+-- inteira, sem fatiar e sem retomar, que e o tipo de consulta que derrubou o
+-- no gratuito no benchmark. Este arquivo so cria as tabelas, vazias.
+-- Depois de carregar contratos ou de classificar o genero dos socios, rodar
+-- python construir_agregados.py. Detalhes em docs/agregados-e-orcamento-de-disco.md.
 --
--- Estado das regras nestas visoes:
---  * RN-05: aplicada por inteiro (socio pessoa juridica no quadro deixa a
---    empresa como mista, e empresa sem socio na base fica separada).
+-- Estado das regras:
+--  * RN-05: aplicada (socio pessoa juridica no quadro deixa a empresa como
+--    mista, empresa sem socio na base fica separada, e socio sem genero
+--    classificado deixa a empresa como 'nao classificado').
 --  * RN-07: aplicada (so socio pessoa fisica, so empresa com contrato, e a
 --    sobreposicao conta apenas socios multiempresa).
 --  * RN-02: pendente. A fato nao tem a flag receita, entao os contratos de
---    receita (cerca de 1,02% dos contratos e 1,6% do valor) entram nos
---    totais. A exclusao depende da coluna que a fato da Fase 2 vai trazer.
+--    receita (cerca de 1,02% dos contratos e 1,6% do valor) entram nos totais.
 --  * Tempo: so ha ano_contrato, nao ha mes.
 -- Os numeros de genero publicados ate agora vem do classificar_empresas.py.
 
--- KPI de genero por setor, UF e faixa racial do territorio. O territorio e
--- o municipio do orgao contratante (fato_contrato.codigo_ibge).
-CREATE MATERIALIZED VIEW IF NOT EXISTS mv_kpi_genero_setor AS
-WITH quadro AS (
-    SELECT p.id_fornecedor,
-           coalesce(bool_or(s.identificador_tipo = 1), false) AS tem_pj,
-           count(DISTINCT p.id_socio) FILTER (WHERE s.identificador_tipo = 2
-               AND p.grupo_qualificacao IN ('participacao', 'titularidade', 'administracao')) AS n,
-           count(DISTINCT p.id_socio) FILTER (WHERE s.identificador_tipo = 2
-               AND p.grupo_qualificacao IN ('participacao', 'titularidade', 'administracao')
-               AND s.genero = 'feminino') AS n_fem,
-           count(DISTINCT p.id_socio) FILTER (WHERE s.identificador_tipo = 2
-               AND p.grupo_qualificacao IN ('participacao', 'titularidade', 'administracao')
-               AND s.genero = 'masculino') AS n_masc,
-           count(DISTINCT p.id_socio) FILTER (WHERE s.identificador_tipo = 2
-               AND p.grupo_qualificacao IN ('participacao', 'titularidade', 'administracao')
-               AND s.genero = 'indeterminado') AS n_ind,
-           count(DISTINCT p.id_socio) FILTER (WHERE s.identificador_tipo = 2
-               AND p.grupo_qualificacao IN ('participacao', 'titularidade', 'administracao')
-               AND s.genero IS NULL) AS n_nulo
-    FROM ponte_empresa_socio p
-    JOIN dim_socio s ON s.id_socio = p.id_socio
-    GROUP BY p.id_fornecedor
-)
-SELECT
-    f.ano_contrato,
-    fo.cnae_principal,
-    m.uf_sigla,
-    CASE
-        WHEN m.pct_negra IS NULL THEN 'sem dado'
-        WHEN m.pct_negra >= 70   THEN 'alta'
-        WHEN m.pct_negra >= 40   THEN 'media'
-        ELSE 'baixa'
-    END AS faixa_pct_negra,
-    CASE
-        WHEN q.id_fornecedor IS NULL      THEN 'sem socio na base'
-        WHEN q.n_nulo > 0                 THEN 'nao classificado'
-        WHEN q.tem_pj                     THEN 'misto ou indeterminado'
-        WHEN q.n = 0                      THEN 'indeterminado'
-        WHEN q.n_ind  > q.n / 3.0         THEN 'misto ou indeterminado'
-        WHEN q.n_fem  > q.n / 2.0         THEN 'feminino'
-        WHEN q.n_masc > q.n / 2.0         THEN 'masculino'
-        ELSE 'misto ou indeterminado'
-    END AS genero_controle,
-    count(*)            AS contratos,
-    sum(f.valor_global) AS valor_total,
-    percentile_cont(0.5) WITHIN GROUP (ORDER BY f.valor_global) AS valor_mediano
-FROM fato_contrato f
-JOIN dim_fornecedor fo    ON fo.cnpj_raiz = f.cnpj_raiz_fornecedor
-LEFT JOIN dim_municipio m ON m.codigo_ibge = f.codigo_ibge
-LEFT JOIN quadro q        ON q.id_fornecedor = fo.id_fornecedor
-GROUP BY 1, 2, 3, 4, 5;
+-- KPI de genero por ano, setor, UF e faixa racial do territorio. O territorio
+-- e o municipio do orgao contratante (fato_contrato.codigo_ibge). Valores
+-- sentinela, para a chave primaria nao ter nulos: ano 0 = sem ano, 'sem cnae',
+-- 'sem uf' e faixa 'sem dado'. A mediana de valor nao esta aqui: nao e aditiva
+-- e exigiria ordenar a fato inteira.
+CREATE TABLE IF NOT EXISTS agg_kpi_genero_setor (
+    ano_contrato     SMALLINT NOT NULL,
+    cnae_principal   TEXT NOT NULL,
+    uf_sigla         TEXT NOT NULL,
+    faixa_pct_negra  TEXT NOT NULL,
+    genero_controle  TEXT NOT NULL,
+    contratos        BIGINT NOT NULL,
+    valor_total      NUMERIC(20,2) NOT NULL,
+    -- O prefixo ix_ no nome da chave mantem a contagem do CI (indices ix_*).
+    CONSTRAINT ix_agg_kpi_genero_pk
+        PRIMARY KEY (ano_contrato, uf_sigla, genero_controle, faixa_pct_negra, cnae_principal)
+);
 
-CREATE INDEX IF NOT EXISTS ix_mv_kpi_genero
-    ON mv_kpi_genero_setor (ano_contrato, uf_sigla, genero_controle);
+COMMENT ON TABLE agg_kpi_genero_setor IS
+  'Granularidade: 1 linha por (ano_contrato, CNAE, UF, faixa de pct_negra, controle da empresa). '
+  'Agregado de fato_contrato montado por construir_agregados.py. Minimo de agregacao na apresentacao (RN-09).';
 
--- Concentracao societaria (RN-07): socio pessoa fisica ligado a 2 ou mais
--- empresas COM contrato, pelos grupos participacao e titularidade. A soma e
--- marcada como sobreposta quando alguma empresa do socio tem mais de um
--- socio multiempresa, porque o mesmo valor entra na soma de cada um deles.
-CREATE MATERIALIZED VIEW IF NOT EXISTS mv_concentracao_socio AS
-WITH contratos_por_empresa AS (
-    SELECT fo.id_fornecedor,
-           count(*)            AS contratos,
-           sum(f.valor_global) AS valor
-    FROM fato_contrato f
-    JOIN dim_fornecedor fo ON fo.cnpj_raiz = f.cnpj_raiz_fornecedor
-    GROUP BY fo.id_fornecedor
-),
-vinculo AS (
-    SELECT DISTINCT p.id_socio, p.id_fornecedor
-    FROM ponte_empresa_socio p
-    JOIN dim_socio s                ON s.id_socio = p.id_socio AND s.identificador_tipo = 2
-    JOIN contratos_por_empresa ce   ON ce.id_fornecedor = p.id_fornecedor
-    WHERE p.grupo_qualificacao IN ('participacao', 'titularidade')
-),
-multiempresa AS (
-    SELECT id_socio
-    FROM vinculo
-    GROUP BY id_socio
-    HAVING count(*) >= 2
-),
-multi_por_empresa AS (
-    SELECT v.id_fornecedor, count(*) AS n_multi
-    FROM vinculo v
-    JOIN multiempresa m ON m.id_socio = v.id_socio
-    GROUP BY v.id_fornecedor
-)
-SELECT
-    s.id_socio,
-    s.identificador_pub,
-    s.genero,
-    count(*)                      AS empresas,
-    sum(ce.contratos)::bigint     AS contratos,
-    sum(ce.valor)                 AS valor_controlado,
-    bool_or(mpe.n_multi > 1)      AS soma_sobreposta
-FROM multiempresa m
-JOIN dim_socio s               ON s.id_socio = m.id_socio
-JOIN vinculo v                 ON v.id_socio = m.id_socio
-JOIN contratos_por_empresa ce  ON ce.id_fornecedor = v.id_fornecedor
-JOIN multi_por_empresa mpe     ON mpe.id_fornecedor = v.id_fornecedor
-GROUP BY s.id_socio, s.identificador_pub, s.genero;
+CREATE TABLE IF NOT EXISTS agg_concentracao_socio (
+    id_socio           INTEGER PRIMARY KEY REFERENCES dim_socio(id_socio),
+    empresas           INTEGER NOT NULL,
+    contratos          BIGINT NOT NULL,
+    valor_controlado   NUMERIC(20,2) NOT NULL,
+    soma_sobreposta    BOOLEAN NOT NULL,
+    identificador_pub  TEXT NOT NULL,
+    genero             TEXT
+);
 
-CREATE INDEX IF NOT EXISTS ix_mv_concentracao
-    ON mv_concentracao_socio (valor_controlado DESC);
+COMMENT ON TABLE agg_concentracao_socio IS
+  'Granularidade: 1 linha por socio pessoa fisica ligado a 2 ou mais empresas com contrato (RN-07). '
+  'soma_sobreposta marca quando uma empresa do socio tem mais de um socio multiempresa.';
+
+CREATE INDEX IF NOT EXISTS ix_agg_concentracao
+    ON agg_concentracao_socio (valor_controlado DESC);
 
 -- Minimo de agregacao (RN-09): nenhum recorte do painel deve mostrar
 -- resultado baseado em menos de cinco socios ou cinco empresas. O filtro
--- fica na camada de apresentacao, nao nas visoes, porque o mesmo agregado
--- pode ser seguro num recorte e inseguro noutro.
+-- fica na camada de apresentacao, nao nos agregados.
