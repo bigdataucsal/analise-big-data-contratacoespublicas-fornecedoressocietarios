@@ -1,8 +1,15 @@
 """
 Carga da Receita (Parquet ja filtrado pelo baixar_receita.py) no modelo
 estrela do Aiven: dim_fornecedor, dim_socio e ponte_empresa_socio.
-Usa COPY em tabela temporaria + INSERT ... ON CONFLICT, entao pode ser
-rodado de novo sem duplicar.
+
+Ordem: rodem ANTES o aplicar_schema.py, que cria o schema novo. Se o banco
+ainda tiver a fato do desenho antigo, este script para com um aviso.
+
+Pode ser rodado de novo sem duplicar (COPY em tabela temporaria + INSERT ...
+ON CONFLICT). Se dim_fornecedor e dim_socio ja estiverem carregadas, pula as
+duas (use --forcar-dimensoes para recarregar) e carrega so a ponte, em lotes
+de 50 mil linhas com commit a cada lote, para o no gratuito nao derrubar a
+conexao.
 
 No etl/.env:
     AIVEN_PG_URI=postgres://usuario:senha@host.aivencloud.com:PORTA/defaultdb?sslmode=require
@@ -11,9 +18,11 @@ No etl/.env:
 Uso (de dentro de etl/):
     python carregar_receita_aiven.py --simular
     python carregar_receita_aiven.py
+    python carregar_receita_aiven.py --forcar-dimensoes
 """
 import argparse
 import hashlib
+import io
 import json
 import os
 import re
@@ -31,6 +40,7 @@ DIR_RECEITA = Path(config.DIR_DADOS_PARQUET) / "receita"
 CSV_RAIZES = Path(config.DIR_RECORTE) / "cnpjs_raiz.csv"
 COMPETENCIA = config.MES_RECEITA[:7]          # AAAA-MM do snapshot
 LOTE = 200_000                                 # linhas por bloco de COPY
+PASSO_PONTE = 50_000                           # linhas da ponte por commit
 
 COLUNAS = {
     "emprecsv": ["cnpj_basico", "razao_social", "natureza_juridica",
@@ -113,7 +123,7 @@ def checar_manifesto(raizes: set) -> None:
     if man.get("total_cnpjs_no_filtro") != len(raizes):
         print(f"   AVISO: o Parquet foi gerado com {man.get('total_cnpjs_no_filtro'):,} "
               f"raizes, mas o cnpjs_raiz.csv atual tem {len(raizes):,}. "
-              f"Refaçam o filtro antes de carregar.")
+              f"Refacam o filtro antes de carregar.")
     if man.get("competencia") and man["competencia"] != config.MES_RECEITA:
         print(f"   AVISO: competencia do Parquet ({man['competencia']}) difere de "
               f"config.MES_RECEITA ({config.MES_RECEITA}).")
@@ -177,7 +187,7 @@ def montar(sal: str, raizes: set):
            .size().reset_index(name="vinculos").sort_values("vinculos", ascending=False))
     print("\n-- qualificacoes presentes e grupo atribuido (conferir a RN-03)")
     for _, r in tab.iterrows():
-        print(f"   {r['qualificacao']:>3} {str(r['descricao'])[:48]:<48} "
+        print(f"   {r['qualificacao']:>3} {sem_acento(r['descricao'])[:48]:<48} "
               f"-> {r['grupo_qualificacao']:<13} {r['vinculos']:>9,}")
 
     achadas = raizes & set(emp["cnpj_basico"])
@@ -188,7 +198,6 @@ def montar(sal: str, raizes: set):
 
 
 def copiar(cur, tabela: str, df: pd.DataFrame) -> None:
-    import io
     cols = ", ".join(df.columns)
     with cur.copy(f"COPY {tabela} ({cols}) FROM STDIN WITH (FORMAT CSV, NULL '')") as c:
         for ini in range(0, len(df), LOTE):
@@ -197,7 +206,7 @@ def copiar(cur, tabela: str, df: pd.DataFrame) -> None:
             c.write(buf.getvalue())
 
 
-def carregar(uri: str, forn, socio, ponte) -> int:
+def carregar(uri: str, forn, socio, ponte, forcar_dim: bool = False) -> int:
     import psycopg
     inicio = time.time()
     ddl = (Path(__file__).resolve().parent / "schema_estrela.sql").read_text(encoding="utf-8")
@@ -208,7 +217,19 @@ def carregar(uri: str, forn, socio, ponte) -> int:
 
     with psycopg.connect(uri, autocommit=False) as con:
         with con.cursor() as cur:
+            if cur.execute("SHOW default_transaction_read_only").fetchone()[0] == "on":
+                raise SystemExit("ERRO: o banco esta em somente leitura (disco cheio?). "
+                                 "Confiram o painel da Aiven antes de carregar.")
+            antiga = cur.execute(
+                "SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' "
+                "AND table_name = 'fato_contrato' AND column_name = 'id_tempo_publicacao'"
+            ).fetchone()
+            if antiga:
+                raise SystemExit("ERRO: o banco ainda tem a fato do desenho antigo. "
+                                 "Rodem antes: python aplicar_schema.py")
+            con.commit()
             cur.execute("SET synchronous_commit = off")
+
             print("\n-- tabelas (se nao existirem)")
             cur.execute(tabelas)
             # A mascara do CPF colide entre pessoas diferentes; a chave e identificador_pub.
@@ -216,67 +237,74 @@ def carregar(uri: str, forn, socio, ponte) -> int:
                         "dim_socio_cpf_mascarado_key")
             con.commit()
 
-            print(f"-- dim_fornecedor ({len(forn):,} empresas)")
-            cur.execute("""CREATE TEMP TABLE stg_fornecedor (
-                cnpj_raiz TEXT, razao_social TEXT, natureza_juridica TEXT, porte TEXT,
-                cnae_principal TEXT, capital_social NUMERIC(18,2), data_inicio_ativ DATE
-            ) ON COMMIT DROP""")
-            copiar(cur, "stg_fornecedor", forn)
-            cur.execute("""
-                INSERT INTO dim_fornecedor (cnpj_raiz, razao_social, tipo_pessoa,
-                    natureza_juridica, porte, cnae_principal, capital_social, data_inicio_ativ)
-                SELECT cnpj_raiz, razao_social, 'PJ', natureza_juridica, porte,
-                       cnae_principal, capital_social, data_inicio_ativ
-                FROM stg_fornecedor
-                ON CONFLICT (cnpj_raiz) DO UPDATE SET
-                    razao_social = EXCLUDED.razao_social,
-                    natureza_juridica = EXCLUDED.natureza_juridica,
-                    porte = EXCLUDED.porte, cnae_principal = EXCLUDED.cnae_principal,
-                    capital_social = EXCLUDED.capital_social,
-                    data_inicio_ativ = EXCLUDED.data_inicio_ativ""")
+            n_f = cur.execute("SELECT count(*) FROM dim_fornecedor").fetchone()[0]
+            n_s = cur.execute("SELECT count(*) FROM dim_socio").fetchone()[0]
             con.commit()
+            pular = (not forcar_dim) and n_f >= len(forn) and n_s >= len(socio)
 
-            print(f"-- dim_socio ({len(socio):,} socios distintos)")
-            cur.execute("""CREATE TEMP TABLE stg_socio (
-                identificador_pub TEXT, cpf_mascarado TEXT,
-                identificador_tipo SMALLINT, faixa_etaria SMALLINT
-            ) ON COMMIT DROP""")
-            copiar(cur, "stg_socio", socio)
-            cur.execute("""
-                INSERT INTO dim_socio (identificador_pub, cpf_mascarado,
-                                       identificador_tipo, faixa_etaria)
-                SELECT identificador_pub, cpf_mascarado, identificador_tipo, faixa_etaria
-                FROM stg_socio
-                ON CONFLICT (identificador_pub) DO UPDATE SET
-                    cpf_mascarado = EXCLUDED.cpf_mascarado,
-                    identificador_tipo = EXCLUDED.identificador_tipo,
-                    faixa_etaria = EXCLUDED.faixa_etaria""")   # genero nao e tocado
-            con.commit()
+            if pular:
+                print(f"-- dim_fornecedor ({n_f:,}) e dim_socio ({n_s:,}) ja carregadas: pulando")
+            else:
+                print(f"-- dim_fornecedor ({len(forn):,} empresas)")
+                cur.execute("""CREATE TEMP TABLE stg_fornecedor (
+                    cnpj_raiz TEXT, razao_social TEXT, natureza_juridica TEXT, porte TEXT,
+                    cnae_principal TEXT, capital_social NUMERIC(18,2), data_inicio_ativ DATE
+                ) ON COMMIT DROP""")
+                copiar(cur, "stg_fornecedor", forn)
+                cur.execute("""
+                    INSERT INTO dim_fornecedor (cnpj_raiz, razao_social, tipo_pessoa,
+                        natureza_juridica, porte, cnae_principal, capital_social, data_inicio_ativ)
+                    SELECT cnpj_raiz, razao_social, 'PJ', natureza_juridica, porte,
+                           cnae_principal, capital_social, data_inicio_ativ
+                    FROM stg_fornecedor
+                    ON CONFLICT (cnpj_raiz) DO UPDATE SET
+                        razao_social = EXCLUDED.razao_social,
+                        natureza_juridica = EXCLUDED.natureza_juridica,
+                        porte = EXCLUDED.porte, cnae_principal = EXCLUDED.cnae_principal,
+                        capital_social = EXCLUDED.capital_social,
+                        data_inicio_ativ = EXCLUDED.data_inicio_ativ""")
+                con.commit()
+
+                print(f"-- dim_socio ({len(socio):,} socios distintos)")
+                cur.execute("""CREATE TEMP TABLE stg_socio (
+                    identificador_pub TEXT, cpf_mascarado TEXT,
+                    identificador_tipo SMALLINT, faixa_etaria SMALLINT
+                ) ON COMMIT DROP""")
+                copiar(cur, "stg_socio", socio)
+                cur.execute("""
+                    INSERT INTO dim_socio (identificador_pub, cpf_mascarado,
+                                           identificador_tipo, faixa_etaria)
+                    SELECT identificador_pub, cpf_mascarado, identificador_tipo, faixa_etaria
+                    FROM stg_socio
+                    ON CONFLICT (identificador_pub) DO UPDATE SET
+                        cpf_mascarado = EXCLUDED.cpf_mascarado,
+                        identificador_tipo = EXCLUDED.identificador_tipo,
+                        faixa_etaria = EXCLUDED.faixa_etaria""")   # genero nao e tocado
+                con.commit()
 
             print(f"-- ponte_empresa_socio ({len(ponte):,} vinculos, competencia {COMPETENCIA})")
-            cur.execute("""CREATE TEMP TABLE stg_ponte (
-                cnpj_raiz TEXT, identificador_pub TEXT, data_entrada DATE,
-                qualificacao TEXT, grupo_qualificacao TEXT, competencia TEXT
-            ) ON COMMIT DROP""")
-            copiar(cur, "stg_ponte", ponte)
-            cur.execute("""
-                INSERT INTO ponte_empresa_socio (id_fornecedor, id_socio, data_entrada,
-                    qualificacao, grupo_qualificacao, competencia)
-                SELECT f.id_fornecedor, s.id_socio, p.data_entrada, p.qualificacao,
-                       p.grupo_qualificacao, p.competencia
-                FROM stg_ponte p
-                JOIN dim_fornecedor f ON f.cnpj_raiz = p.cnpj_raiz
-                JOIN dim_socio s ON s.identificador_pub = p.identificador_pub
-                ON CONFLICT (id_fornecedor, id_socio, qualificacao, competencia)
-                DO UPDATE SET data_entrada = EXCLUDED.data_entrada,
-                              grupo_qualificacao = EXCLUDED.grupo_qualificacao""")
-            con.commit()
+            for ini in range(0, len(ponte), PASSO_PONTE):
+                cur.execute("""CREATE TEMP TABLE stg_ponte (
+                    cnpj_raiz TEXT, identificador_pub TEXT, data_entrada DATE,
+                    qualificacao TEXT, grupo_qualificacao TEXT, competencia TEXT
+                ) ON COMMIT DROP""")
+                copiar(cur, "stg_ponte", ponte.iloc[ini:ini + PASSO_PONTE])
+                cur.execute("""
+                    INSERT INTO ponte_empresa_socio (id_fornecedor, id_socio, data_entrada,
+                        qualificacao, grupo_qualificacao, competencia)
+                    SELECT f.id_fornecedor, s.id_socio, p.data_entrada, p.qualificacao,
+                           p.grupo_qualificacao, p.competencia
+                    FROM stg_ponte p
+                    JOIN dim_fornecedor f ON f.cnpj_raiz = p.cnpj_raiz
+                    JOIN dim_socio s ON s.identificador_pub = p.identificador_pub
+                    ON CONFLICT (id_fornecedor, id_socio, qualificacao, competencia)
+                    DO UPDATE SET data_entrada = EXCLUDED.data_entrada,
+                                  grupo_qualificacao = EXCLUDED.grupo_qualificacao""")
+                con.commit()
+                print(f"   {min(ini + PASSO_PONTE, len(ponte)):,} / {len(ponte):,}")
 
             print("-- indices (depois da carga)")
-            for cmd in [c.strip() for c in indices.split(";") if c.strip()]:
-                if all(l.strip().startswith("--") or not l.strip() for l in cmd.splitlines()):
-                    continue
-                cur.execute(cmd)
+            cur.execute(indices)
             con.commit()
             for t in ("dim_fornecedor", "dim_socio", "ponte_empresa_socio"):
                 cur.execute(f"ANALYZE {t}")
@@ -305,6 +333,8 @@ def main() -> int:
     p = argparse.ArgumentParser(description="Carga da Receita filtrada no Aiven (estrela)")
     p.add_argument("--simular", action="store_true", help="nao conecta; mostra contagens")
     p.add_argument("--uri", default=None)
+    p.add_argument("--forcar-dimensoes", action="store_true",
+                   help="recarrega dim_fornecedor e dim_socio mesmo se ja estiverem carregadas")
     a = p.parse_args()
 
     sal = os.environ.get("SALT_SOCIO", "")
@@ -329,7 +359,7 @@ def main() -> int:
         return 1
     if "sslmode=" not in uri:
         uri += ("&" if "?" in uri else "?") + "sslmode=require"
-    return carregar(uri, forn, socio, ponte)
+    return carregar(uri, forn, socio, ponte, a.forcar_dimensoes)
 
 
 if __name__ == "__main__":
