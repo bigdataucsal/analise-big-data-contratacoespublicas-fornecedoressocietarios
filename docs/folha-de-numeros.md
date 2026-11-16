@@ -135,10 +135,11 @@ Honestidade aqui vale mais que cobertura. As pendências estão em
 - O KPI 1 cruzado com **valor** não está pronto; o que existe conta empresas.
 - Controle é contado **por cabeça**, porque o percentual de capital não existe
   nos dados abertos. É a principal limitação do trabalho.
-- A `mv_kpi_genero_setor` **não aplica a RN-05 inteira** (ignora sócio PJ e
-  junta as empresas sem sócio com as mistas). A diferença está medida em
-  `etl/testes/test_divergencia_visao_kpi.py`, e os números publicados vêm do
-  script, não da visão.
+- O agregado do banco (`agg_kpi_genero_setor`) **concorda com a RN-05**, e há
+  teste que lê o SQL e prova (`etl/testes/test_agregado_vs_regra.py`). Ele tem
+  uma classe a mais que a regra original previa, `nao classificado`, para
+  empresa com sócio de gênero ainda nulo — que não é o mesmo que
+  `indeterminado`.
 - A marcação de sanção depende do CEIS e do CNEP, que são da T2.
 - Não há campo de situação na coleta, logo contrato cancelado depois de
   publicado pode estar nos indicadores.

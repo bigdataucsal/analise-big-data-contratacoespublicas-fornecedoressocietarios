@@ -102,6 +102,32 @@ class TestRN05Controle(unittest.TestCase):
         self.assertEqual(classe, controle.SEM_SOCIO)
         self.assertEqual(motivo, "sem_linha_na_base")
 
+    def test_socio_sem_genero_nao_e_indeterminado(self):
+        """Nulo e ausencia de veredito; indeterminado e veredito da RN-04."""
+        self.assertEqual(
+            controle.classificar_empresa(2, 1, 0, False, n_nulo=1),
+            (controle.NAO_CLASSIFICADO, "socio_sem_genero"))
+        self.assertNotEqual(controle.NAO_CLASSIFICADO, controle.INDETERMINADO)
+
+    def test_socio_sem_genero_decide_antes_do_socio_pj(self):
+        self.assertEqual(
+            controle.classificar_empresa(2, 1, 0, True, n_nulo=1)[0],
+            controle.NAO_CLASSIFICADO)
+
+    def test_sem_socio_na_base_decide_antes_do_socio_sem_genero(self):
+        self.assertEqual(
+            controle.classificar_com_base(0, 0, 0, False, 0, n_nulo=3)[0],
+            controle.SEM_SOCIO)
+
+    def test_nao_classificado_nao_conta_como_controle_definido(self):
+        self.assertFalse(controle.controle_definido(controle.NAO_CLASSIFICADO))
+
+    def test_rotulo_do_agregado_cobre_todas_as_classes(self):
+        for classe in (controle.FEMININO, controle.MASCULINO, controle.MISTO,
+                       controle.INDETERMINADO, controle.SEM_SOCIO,
+                       controle.NAO_CLASSIFICADO):
+            self.assertIsInstance(controle.rotulo_agregado(classe), str)
+
     def test_so_feminino_e_masculino_contam_como_controle_definido(self):
         self.assertTrue(controle.controle_definido(controle.FEMININO))
         self.assertTrue(controle.controle_definido(controle.MASCULINO))

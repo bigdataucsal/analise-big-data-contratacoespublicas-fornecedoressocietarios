@@ -177,10 +177,12 @@ Além das quatro do início:
    1.608 linhas, 0,49% dos sócios elegíveis, e o efeito real sobre a
    classificação não foi medido. Os dois critérios existem lado a lado em
    `etl/regras/qualificacoes.py` para que a diferença continue mensurável.
-4. **A visão materializada do KPI não aplica a RN-05 inteira.** A
-   `mv_kpi_genero_setor` não olha o sócio pessoa jurídica e põe as empresas sem
-   sócio na base junto com as mistas. Os números publicados vêm do script, não
-   da visão.
+4. **Empresa com sócio sem gênero classificado sai do KPI como classe
+   própria.** O agregado do banco marca `nao classificado` quando algum sócio
+   pessoa física elegível ainda está com gênero nulo. Não é `indeterminado`,
+   que é veredito da RN-04 para nome ambíguo ou ausente da base: aqui não houve
+   veredito nenhum. O tamanho desse grupo depende da cobertura da classificação
+   de nomes e precisa ser publicado junto com o KPI.
 5. **Eixo temporal.** A coleta é por data de publicação (D7). No ano a
    diferença para a data de assinatura é pequena — 92,69% dos contratos
    publicados têm ano de contrato 2025 —, mas cada análise deve declarar qual

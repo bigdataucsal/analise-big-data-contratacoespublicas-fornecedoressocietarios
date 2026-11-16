@@ -12,7 +12,7 @@ Os testes rodam de dentro de `etl/`, sem dependência além do que o
 cd etl && python -m unittest discover -s testes -t . -v
 ```
 
-São 112 testes, todos passando em 10/11/2026. A CI os executa em cada pull
+São 118 testes, todos passando em 16/11/2026. A CI os executa em cada pull
 request para a `main`, no passo "Testar as regras de negocio" de
 `.github/workflows/ci-etl.yml`.
 
@@ -38,7 +38,7 @@ divergência.
 | RN-02 Elegibilidade do contrato | §RN-02 | `etl/regras/elegibilidade.py`; `etl/recorte_cnpjs.py` | `TestRN02Elegibilidade`, `TestTratamentoSQL.test_rn02_*` | 9 + 1 | regra completa em módulo; a marcação no Parquet ainda não é gravada |
 | RN-03 Sócio com poder de controle | §RN-03 | `etl/regras/qualificacoes.py` (lista de códigos); `etl/classificar_empresas.py` (critério antigo, por palavra) | `TestRN03Qualificacoes` | 11 | os dois critérios convivem de propósito; o script ainda usa o antigo |
 | RN-04 Inferência de gênero | §RN-04 | `etl/regras/genero.py`; `etl/inferir_genero.py` | `TestRN04Genero` | 12 | implementada; sensibilidade ao limiar nos sócios não medida |
-| RN-05 Controle da empresa | §RN-05 | `etl/regras/controle.py`; `etl/classificar_empresas.py` | `TestRN05Controle` | 9 | implementada no script; a visão materializada não aplica a regra inteira |
+| RN-05 Controle da empresa | §RN-05 | `etl/regras/controle.py`; `etl/classificar_empresas.py`; `SQL_CONTROLE` em `etl/construir_agregados.py` | `TestRN05Controle`, `TestAgregadoVsRegra` | 14 + 7 | implementada e conferida contra o agregado do banco |
 | RN-06 Proxy de cor ou raça | §RN-06 | `etl/regras/proxy_racial.py`; `etl/baixar_proxy_racial.py`; `etl/traduzir_municipios.py` | `TestRN06ProxyRacial` | 5 | eixo censitário pronto; eixo RAIS pendente |
 | RN-07 Concentração societária | §RN-07 | `etl/regras/concentracao.py` | `TestRN07Concentracao` | 8 | regra em código pela primeira vez; falta rodar sobre a Receita filtrada |
 | RN-08 Sanção na data | §RN-08 | `etl/regras/sancoes.py` | `TestRN08Sancoes` | 10 | regra em código pela primeira vez; depende do CEIS e do CNEP (T2) |
@@ -52,34 +52,46 @@ confere que o cabeçalho do `SELECT` do tratamento, a lista `COLUNAS` do
 `carregar_aiven.py` e o `schema_postgres.sql` continuam de acordo — a carga
 valida isso em tempo de execução e o teste antecipa a descoberta.
 `TestSQLSemComentarioQuebrado` é regressão do defeito descrito abaixo. E
-`TestDivergenciaVisaoKPI` mede a diferença entre a `mv_kpi_genero_setor` e a
-RN-05, descrita na seção seguinte.
+`TestAgregadoVsRegra` confere o agregado do banco contra a RN-05, descrito na
+seção seguinte.
 
-## A visão do KPI não aplica a RN-05 inteira, e a diferença está medida
+## O agregado do KPI e a RN-05 classificam igual, e isso está provado
 
-A RN-05 já registrava que a `mv_kpi_genero_setor` de `etl/schema_estrela.sql`
-divergia da regra. `testes/test_divergencia_visao_kpi.py` transcreve o `CASE`
-da visão para Python e roda os dois critérios sobre os mesmos quadros
-societários. São duas divergências, nas duas direções que importam:
+O KPI de controle feminino sai da tabela `agg_kpi_genero_setor`, alimentada
+pelo `SQL_CONTROLE` do `etl/construir_agregados.py`. Se aquele `CASE` e o
+`etl/regras/controle.py` discordarem, o número da tela deixa de ser o número da
+regra — que é exatamente o que a auditoria existe para impedir.
 
-1. **A visão ignora o sócio pessoa jurídica.** O `LATERAL` filtra
-   `identificador_tipo = 2`, de modo que o sócio PJ não entra na contagem e
-   também não aciona regra nenhuma. Uma empresa com três sócias e um sócio PJ
-   no quadro é "feminino" na visão e `misto_ou_indeterminado` pela RN-05, que
-   manda não classificar cadeia societária sem resolver a cadeia.
-2. **A visão não tem classe para a empresa sem sócio na base.** As 65.001
-   empresas da D5, 27,1% do recorte, caem no mesmo balde das mistas, e na tela
-   não é possível distinguir controle indefinido de controle não inferível.
+`testes/test_agregado_vs_regra.py` **lê o SQL do módulo** e executa o `CASE` de
+verdade no DuckDB sobre onze quadros societários sintéticos, comparando linha a
+linha com o módulo. Hoje os dois concordam em todos os casos, inclusive nos
+dois que antes divergiam: a empresa com sócio pessoa jurídica no quadro e a
+empresa sem nenhuma linha de sócio na base.
 
-A direção do erro é conhecida e está fixada em teste: nos casos em que
-discordam, a visão devolve classe definida onde a regra devolve misto, nunca o
-contrário. Logo **o denominador do KPI calculado pela visão é maior ou igual ao
-da regra**, e o percentual de controle feminino publicado a partir da visão não
-é comparável ao dos 30,4% que vieram do `classificar_empresas.py`.
+Isso é uma mudança de estado em relação à versão anterior deste documento, que
+registrava as duas divergências como abertas. A T2 corrigiu as duas na
+consolidação do modelo estrela, quando trocou a visão materializada
+`mv_kpi_genero_setor` pela tabela de agregado.
 
-Enquanto a visão não for alinhada, os números publicados devem continuar vindo
-do script, como a RN-05 já determina. Quando for alinhada, é esse mesmo teste
-que mostra que acabou.
+**O caso novo que veio junto.** O `CASE` da T2 trouxe uma classe que a RN-05
+escrita não previa: `nao classificado`, para a empresa que tem sócio pessoa
+física elegível com gênero ainda nulo. Não é a mesma coisa que `indeterminado`
+— indeterminado é um veredito da RN-04 (nome ambíguo ou ausente da base de
+nomes), nulo é ausência de veredito. Misturar os dois faria a empresa parecer
+avaliada quando não foi. O `regras/controle.py` passou a ter a classe, com a
+mesma precedência do SQL (decide antes do sócio PJ), e a RN-05 foi atualizada.
+
+**Por que o teste lê o SQL em vez de guardar uma cópia.** A versão anterior
+guardava a transcrição do `CASE` em Python. Quando a T2 trocou a visão pelo
+agregado e corrigiu a regra, o teste **continuou passando** e o documento
+continuou afirmando uma divergência que já não existia — um teste verde
+sustentando uma afirmação falsa, que é pior do que um teste vermelho. Lendo da
+fonte, ou ele acompanha a mudança ou falha.
+
+Conferido por mutação: retirando do `SQL_CONTROLE` o ramo do sócio pessoa
+jurídica, o teste falha em três pontos e nomeia a divergência
+(`regra=misto ou indeterminado agregado=feminino`); apagando o `CASE` inteiro,
+ele para com a mensagem pedindo que o teste seja reapontado em vez de removido.
 
 ## O que cada regra prova, em uma linha
 
@@ -156,9 +168,8 @@ Dependem de outra trilha:
 5. RN-08 precisa do CEIS e do CNEP (T2, issue #27). O módulo e os testes já
    estão prontos: assim que o arquivo existir, falta só indexar e marcar.
 6. RN-09 precisa da camada de apresentação (T4) para que a supressão de agregado
-   pequeno tenha onde ser aplicada. O filtro fica no painel e não na visão
-   materializada, porque o mesmo agregado pode ser seguro num recorte e inseguro
-   noutro.
-7. A visão `mv_kpi_genero_setor` do `etl/schema_estrela.sql` não aplica a RN-05
-   inteira: não olha o sócio pessoa jurídica e põe as empresas sem sócio na base
-   junto com as mistas. Alinhar na carga da Fase 2.
+   pequeno tenha onde ser aplicada. O filtro fica no painel e não no agregado,
+   porque o mesmo agregado pode ser seguro num recorte e inseguro noutro.
+
+Saiu da lista: a divergência entre o agregado do KPI e a RN-05 foi fechada pela
+T2 na consolidação do modelo estrela, e passou a ter teste que a mantém fechada.

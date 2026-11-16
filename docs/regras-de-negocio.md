@@ -366,10 +366,22 @@ Fase 2, e até lá nenhum texto deve apresentar os 30,4% como participação no
 valor contratado. A contagem também inclui empresas que só aparecem em contratos
 de receita (ver RN-02).
 
-A visão materializada do KPI em `etl/schema_estrela.sql` ainda não aplica esta
-regra por inteiro: ela não olha o sócio pessoa jurídica e põe as empresas sem
-sócio na base junto com as mistas. Os números publicados vêm do
-`classificar_empresas.py`, e a visão será alinhada na carga da Fase 2.
+Alteração de 16/11/2026: o agregado do banco passou a aplicar esta regra por
+inteiro. A versão anterior deste parágrafo registrava que a visão materializada
+`mv_kpi_genero_setor` não olhava o sócio pessoa jurídica e juntava as empresas
+sem sócio na base com as mistas. A T2 trocou a visão pela tabela
+`agg_kpi_genero_setor`, alimentada pelo `SQL_CONTROLE` do
+`etl/construir_agregados.py`, e corrigiu as duas coisas. O
+`etl/testes/test_agregado_vs_regra.py` lê aquele SQL e prova a concordância
+com o `etl/regras/controle.py`, caso a caso.
+
+Uma classe entrou junto, e esta regra passa a tê-la: **`nao classificado`**,
+para a empresa que tem sócio pessoa física elegível com gênero ainda nulo. Ela
+decide antes de todas as outras condições, inclusive antes do sócio pessoa
+jurídica. Não se confunde com `indeterminado`: indeterminado é veredito da
+RN-04, para nome ambíguo ou ausente da base de nomes, enquanto nulo é ausência
+de veredito. Somar os dois faria a empresa parecer avaliada quando não foi, e o
+tamanho desse grupo deve ser publicado junto com o KPI.
 
 ## RN-06. Proxy de composição por cor ou raça
 
