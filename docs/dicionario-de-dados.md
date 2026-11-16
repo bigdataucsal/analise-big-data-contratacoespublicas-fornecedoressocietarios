@@ -235,7 +235,7 @@ projeto defende.
 | grupo_qualificacao | TEXT | | sim | derivada | participacao, titularidade, administracao, representacao, outro |
 | data_entrada | DATE | | sim | SOCIOS coluna 6 | não existe data de saída |
 
-A competência faz parte da chave primária de propósito. O arquivo da Receita é
+A competência faz parte da chave primária. O arquivo da Receita é
 um retrato do momento e não tem data de saída da sociedade, de modo que a única
 forma de reconstruir entradas e saídas é comparar competências sucessivas. Se a
 competência ficasse fora da chave, o modelo impediria por construção exatamente

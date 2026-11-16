@@ -34,8 +34,7 @@ falava em mais de 80 GB compactados; esse número não se confirmou na
 competência usada, e este documento usa o medido. Descompactada, a Receita tem
 cerca de oito vezes o volume do JSON de contratos (28,67 GB contra 3,62 GB).
 
-O destino é um PostgreSQL no plano gratuito da Aiven, com 1 GB. Vale registrar
-que esse 1 GB é o disco de dados do serviço inteiro, e não a soma do tamanho
+O destino é um PostgreSQL no plano gratuito da Aiven, com 1 GB. Esse 1 GB é o disco de dados do serviço inteiro, e não a soma do tamanho
 das tabelas: contam também os índices, o write ahead log, os arquivos
 temporários gerados por consultas que não cabem na memória e o espaço deixado
 por registros atualizados antes da limpeza automática. Apenas os backups ficam
@@ -136,8 +135,7 @@ medido foi de aproximadamente 7 registros por segundo na varredura sequencial
 profunda para cerca de 150 por segundo com a janela diária dentro do limite de
 taxa.
 
-Um resultado contraintuitivo que vale registrar: reduzir o tamanho da página
-piora o desempenho. Uma página de 500 registros leva 1,6 segundo e rende 312
+Reduzir o tamanho da página piora o desempenho, o que é contraintuitivo. Uma página de 500 registros leva 1,6 segundo e rende 312
 registros por segundo, enquanto uma de 100 leva 0,85 segundo e rende 118. Como
 o limite é de requisições e não de bytes, páginas menores gastam cinco vezes
 mais requisições para os mesmos dados e atingem o limite cinco vezes mais
@@ -393,7 +391,7 @@ quantas são no ano não foi medido `[PENDENTE]`. Na regra RN-03, a escolha de
 contar diretor, presidente e conselheiro como administradores (decisão D4) pesa
 7,8% das linhas de sócio, e a rodada sem eles fica para a Fase 2.
 
-Vale notar que a terceira pergunta é a que mais restringe o desenho técnico,
+A terceira pergunta é a que mais restringe o desenho técnico,
 porque análise de rede exige ver todos os contratos de cada sócio dentro do
 recorte. Das três estratégias de redução de volume que o guia oferece, que são
 filtros, agregações e amostragem estatística, adotamos as duas primeiras e

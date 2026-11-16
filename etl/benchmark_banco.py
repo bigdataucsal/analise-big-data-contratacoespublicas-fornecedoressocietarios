@@ -1,49 +1,4 @@
-"""
-Teste comparativo que sustenta a escolha do banco.
-=====================================================================
-Entrega da T3, semana 3 (atualizado pela T2 em 02/10/2026). Roda a MESMA
-consulta analitica em duas abordagens e cronometra as duas, para que a
-escolha do modelo seja evidencia e nao preferencia.
-
-A consulta escolhida e a do KPI interseccional, que e a mais pesada do
-painel e a que melhor representa a carga real: junta o fato com a
-dimensao de fornecedor e com a de municipio, agrupa por faixa de
-composicao racial do territorio e por faixa de valor, e calcula soma,
-contagem e mediana. Tres juncoes e uma agregacao com mediana -- e
-exatamente o formato que o modelo estrela existe para responder.
-
-As duas abordagens comparadas:
-
-    1. Arquivos soltos lidos com pandas. E o que o grupo ja tinha
-       instalado no comeco do projeto, e representa "nao usar banco".
-    2. Motor analitico colunar (DuckDB) sobre Parquet. Representa a
-       camada analitica do projeto.
-
-O que este teste NAO mede
--------------------------
-O tempo do PostgreSQL. Ele e medido por benchmark_postgres.py, contra o
-servico gratuito da Aiven, com o mesmo fato.csv. Para comparar os tres com
-o MESMO volume, use --linhas (veja abaixo). Confira no benchmark_postgres.py
-que ele tambem carrega o INICIO do fato.csv; se carregar, as N linhas sao
-as mesmas nos tres testes.
-
-Conferencia dos resultados
---------------------------
-Alem do tempo, o script compara o RESULTADO das duas abordagens, grupo a
-grupo (contratos, soma e mediana do valor). Antes so o numero de linhas do
-resultado era comparado; agora o resultado inteiro e.
-
-Uso (rodar de dentro de etl/):
-    python benchmark_banco.py                      # prepara os arquivos e roda no volume completo
-    python benchmark_banco.py --repeticoes 7
-    python benchmark_banco.py --linhas 200000      # usa os arquivos ja preparados; primeiras 200 mil linhas
-    python benchmark_banco.py --linhas 1000000     # idem, 1 milhao
-    python benchmark_banco.py --linhas 0           # usa os arquivos ja preparados; todas as linhas
-
-Com --linhas, os arquivos de dados NAO sao regerados: o script le o
-dados/benchmark/fato.csv que ja existe (o mesmo que o benchmark_postgres.py
-usa) e as dimensoes. A saida e gravada em docs/evidencias/.
-"""
+"""Compara pandas sobre CSV e DuckDB sobre Parquet na mesma consulta."""
 
 import argparse
 import itertools
@@ -69,18 +24,11 @@ _saida: list[str] = []
 
 
 def say(texto: str = "") -> None:
-    """Imprime e guarda a linha, para gravar a evidencia no fim."""
     print(texto)
     _saida.append(texto)
 
 
 def preparar(con, escala: int = 1):
-    """Materializa fato e dimensoes nos dois formatos, a partir do tratado.
-
-    A mesma informacao vira CSV (para o pandas ler como arquivo solto) e
-    Parquet (para o motor colunar). Comparar leitura de CSV com leitura de
-    Parquet e parte legitima do teste: o formato E uma das decisoes.
-    """
     DIR_BENCH.mkdir(parents=True, exist_ok=True)
 
     con.execute(f"""
@@ -95,20 +43,12 @@ def preparar(con, escala: int = 1):
         )
     """)
 
-    # Fato enxuto: so as colunas que a consulta usa.
-    #
-    # A escala replica o fato para aproximar o tamanho real do recorte. Aos
-    # 58 mil contratos de janeiro os dois caminhos cabem inteiros na memoria
-    # e a diferenca fica pequena -- o que interessa medir e o comportamento
-    # quando o volume cresce, porque e esse o cenario do projeto (2.023.236
-    # contratos no ano). A replicacao muda a chave para nao colapsar as
-    # juncoes, mantendo a cardinalidade do agrupamento.
     con.execute(f"""
         COPY (
             SELECT numero_controle_pncp || '-' || r.i AS numero_controle_pncp,
                    codigo_ibge, cnpj_raiz_fornecedor, valor_global, ano_contrato
             FROM tratado, range({escala}) AS r(i)
-            WHERE valor_global > 0 AND valor_global <= 1e9   -- corte de sanidade
+            WHERE valor_global > 0 AND valor_global <= 1e9
         ) TO '{DIR_BENCH}/fato.parquet' (FORMAT PARQUET, COMPRESSION ZSTD)
     """)
     con.execute(f"""
@@ -139,7 +79,6 @@ def preparar(con, escala: int = 1):
 
 
 def tamanhos(dir_fato: Path) -> dict:
-    """Tamanho em disco dos arquivos usados nesta rodada."""
     arquivos = {
         "fato": dir_fato / "fato",
         "dim_fornecedor": DIR_BENCH / "dim_fornecedor",
@@ -151,19 +90,13 @@ def tamanhos(dir_fato: Path) -> dict:
 
 
 def criar_amostra(n: int) -> Path:
-    """Cria uma fato com as PRIMEIRAS n linhas do fato.csv ja existente.
-
-    O recorte e feito linha a linha no proprio arquivo de texto, sem
-    reformatar nada. O Parquet da amostra e gerado a partir desse mesmo
-    CSV, para que as duas abordagens leiam exatamente o mesmo conteudo.
-    """
     dir_amostra = DIR_BENCH / f"amostra_{n}"
     dir_amostra.mkdir(parents=True, exist_ok=True)
     origem = DIR_BENCH / "fato.csv"
     destino = dir_amostra / "fato.csv"
     with open(origem, "r", encoding="utf-8", newline="") as f, \
             open(destino, "w", encoding="utf-8", newline="") as g:
-        for linha in itertools.islice(f, n + 1):   # cabecalho + n linhas
+        for linha in itertools.islice(f, n + 1):
             g.write(linha)
 
     con = duckdb.connect()
@@ -249,7 +182,6 @@ def normalizar_pandas(df) -> dict:
 
 
 def comparar(a: dict, b: dict) -> list[str]:
-    """Devolve a lista de divergencias entre os dois resultados (vazia = iguais)."""
     problemas = []
     so_a, so_b = set(a) - set(b), set(b) - set(a)
     if so_a:

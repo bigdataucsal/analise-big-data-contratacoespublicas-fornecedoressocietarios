@@ -1,27 +1,4 @@
-"""
-Mede a MESMA consulta do benchmark_banco.py no PostgreSQL (servico de teste da Aiven).
-
-Entrega da T2. Complementa o benchmark_banco.py: reaproveita os CSV que ele grava em
-dados/benchmark/ (fato.csv, dim_fornecedor.csv, dim_municipio.csv), carrega num schema
-isolado ("bench"), roda a consulta e mede tambem o tamanho real das tabelas no banco.
-
-Antes:
-    pip install psycopg2-binary
-    python benchmark_banco.py                       # gera dados/benchmark/*.csv
-    $env:DATABASE_URL = "postgres://..."            # PowerShell; a URI NUNCA vai para chat nem Git
-
-Uso (de dentro de etl/):
-    python benchmark_postgres.py                    # ensaio: carrega 200 mil linhas do fato
-    python benchmark_postgres.py --linhas 0         # carga completa (so ai os tempos sao comparaveis)
-    python benchmark_postgres.py --linhas 0 --manter  # nao apaga o schema no final
-
-Cuidados com o plano gratuito (1 GB de disco para tudo):
-  - O script trabalha no schema "bench" e o APAGA no final (use --manter para evitar).
-  - Consultas com mediana ordenam muitos dados e podem gerar arquivos temporarios, que
-    contam na mesma cota. O script reporta os bytes temporarios gerados.
-  - Os tempos incluem a latencia de rede ate o servidor. O tempo de execucao no proprio
-    servidor (EXPLAIN ANALYZE) e reportado a parte.
-"""
+"""Mede a MESMA consulta do benchmark_banco.py no PostgreSQL (servico de teste da Aiven)."""
 
 import argparse
 import io
@@ -66,7 +43,6 @@ CREATE INDEX ix_dimf_cnpj   ON {SCHEMA}.dim_fornecedor (cnpj_raiz_fornecedor);
 CREATE INDEX ix_dimm_ibge   ON {SCHEMA}.dim_municipio (codigo_ibge);
 """
 
-# Mesma consulta do benchmark_banco.py (mesmas faixas, fechadas a esquerda).
 CONSULTA = f"""
     SELECT
         CASE WHEN m.pct_negra >= 70 THEN 'alta'
@@ -121,7 +97,7 @@ def conectar(nome_var):
 def abrir_csv(nome, linhas):
     f = open(DIR_BENCH / nome, encoding="utf-8", newline="")
     if linhas:
-        corte = io.StringIO("".join(itertools.islice(f, linhas + 1)))  # +1 = cabecalho
+        corte = io.StringIO("".join(itertools.islice(f, linhas + 1)))
         f.close()
         return corte
     return f
@@ -177,7 +153,6 @@ def relatar(rotulo, tempos, linhas, servidor):
 
 
 def conferir_com_duckdb(linhas_pg):
-    """Compara totais com o DuckDB sobre os mesmos Parquet (so faz sentido na carga completa)."""
     try:
         import duckdb
     except ImportError:

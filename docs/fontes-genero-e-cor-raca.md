@@ -95,8 +95,8 @@ suprimidos por terem menos de vinte ocorrências no país, e 1,6% são nomes
 genuinamente ambíguos, que aparecem na base com boa frequência mas cuja
 proporção dominante não alcança os 90%.
 
-A sensibilidade ao limiar foi medida e vale registrar, porque mostra que a
-escolha dos 90% não é arbitrária nem frágil:
+A sensibilidade ao limiar foi medida, e mostra que a escolha dos 90% não é
+arbitrária nem frágil:
 
 | limiar | indeterminados |
 |---|---|

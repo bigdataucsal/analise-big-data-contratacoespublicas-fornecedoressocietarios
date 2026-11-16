@@ -1,0 +1,33 @@
+Auditoria independente dos KPIs
+  fonte .......... read_parquet('C:/Users/iagol/OneDrive/Área de Trabalho/Faculdade/8 Semestre/Big Data/analise-big
+  referencia ..... amostra de janeiro
+  tolerancia ..... 0.1%
+
+1. Universo e elegibilidade (RN-01 e RN-02)
+-------------------------------------------
+  contratos no recorte                                 58.769   ok (ref 58.769)
+  valor bruto somado                     2.645.371.244.529,42
+  contrato_suspeito (> R$ 1 bi)                            26   ok (ref 26)
+  share dos suspeitos no valor                         98,74%   ok (ref 98,74%)
+  valor depois do corte                     32.564.300.675,77
+  contratos de receita                                    515
+  valor zero em centavos                                  415
+  elegiveis para indicador de valor                    57.835
+  sem raiz de CNPJ                                      1.650
+  raizes distintas                                     20.436
+
+2. Conferencia da marca contra o modulo das regras
+--------------------------------------------------
+  linhas conferidas na amostra                         20.000
+  linhas em que SQL e modulo divergem                       0   ok (ref 0)
+
+3. Genero e controle societario (RN-03 a RN-05)
+-----------------------------------------------
+  empresas classificadas                       nao verificado   sem a Receita filtrada nesta maquina
+  controle feminino                            nao verificado   depende do classificar_empresas.py
+
+  A Receita filtrada e o genero_por_empresa.csv ficaram na maquina da T2.
+  Com eles presentes, esta secao recalcula a RN-05 por fora do script
+  que a produziu e compara com os numeros publicados.
+
+RESULTADO: nenhuma divergencia acima da tolerancia.

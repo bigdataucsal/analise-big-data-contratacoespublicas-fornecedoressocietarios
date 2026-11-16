@@ -213,8 +213,7 @@ de estabelecimentos, onde ela convive com o código de município na mesma
 linha, o que resolve a ambiguidade entre municípios homônimos de estados
 diferentes.
 
-Uma sutileza da normalização que vale registrar, porque erra fácil e erra em
-silêncio: o apóstrofo tem que ser apagado, não trocado por espaço. O IBGE
+Uma sutileza da normalização, que erra fácil e erra em silêncio: o apóstrofo tem que ser apagado, não trocado por espaço. O IBGE
 escreve "Alta Floresta D'Oeste" e a Receita escreve "ALTA FLORESTA DOESTE";
 trocando por espaço sairia "D OESTE" contra "DOESTE" e os dois não casariam.
 São 47 municípios com apóstrofo no nome, todos os "d'Oeste", "d'Água" e

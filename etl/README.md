@@ -1,4 +1,4 @@
-# Pipeline ETL — PNCP → Parquet → Aiven for PostgreSQL
+# Pipeline ETL: PNCP → Parquet → Aiven for PostgreSQL
 
 Documenta os scripts de extração e tratamento. Os números aqui foram medidos
 contra a API do PNCP em 19/09/2026, não estimados.
@@ -38,12 +38,12 @@ contra a API do PNCP em 19/09/2026, não estimados.
          │
          │  carregar_aiven.py            (COPY + índices)
          ▼
-    Aiven for PostgreSQL — tabela `contratos`
+    Aiven for PostgreSQL: tabela `contratos`
 ```
 
 ---
 
-## 1. Extração — `baixar_pncp_rapido.py`
+## 1. Extração: `baixar_pncp_rapido.py`
 
 ### O problema
 
@@ -62,7 +62,7 @@ completa não termina em tempo útil.
 ### A saída
 
 Quebrar o período em **janelas de 1 dia**. Cada dia tem ~5.500 contratos, ou
-seja no máximo ~18 páginas — então toda requisição é rasa (~2 s) e o custo por
+seja no máximo ~18 páginas, então toda requisição é rasa (~2 s) e o custo por
 página para de crescer. Somando: `tamanhoPagina=500` (o máximo aceito; 1000
 responde 400), conexão reaproveitada e alguns dias em paralelo.
 
@@ -72,7 +72,7 @@ responde 400), conexão reaproveitada e alguns dias em paralelo.
 | este, em janela sem limite de taxa | ~780 registros/s |
 | este, com a porta de ritmo em 2,0 s | ~150 reg/s |
 
-### Limite de taxa — o que medimos, e onde a intuição erra
+### Limite de taxa: o que medimos e onde a intuição erra
 
 A API devolve 429 sob concorrência e não manda `Retry-After`. Duas rodadas
 mediram coisas diferentes, e a segunda corrigiu a primeira:
@@ -85,14 +85,14 @@ mediram coisas diferentes, e a segunda corrigiu a primeira:
 | 79 req/min (**1 thread**) | 13 |
 
 O limite é de **requisições por unidade de tempo**, e fica entre 20 e 40
-req/min. Não é o tamanho da resposta, nem a concorrência — repare que 1
+req/min. Não é o tamanho da resposta, nem a concorrência, repare que 1
 thread a 79 req/min falha tanto quanto 3 threads a 62.
 
 Daí o padrão: porta de **2,0 s** e 2 workers. O alvo nominal é 30 req/min,
 mas a latência das respostas (1,6–2,8 s) puxa o ritmo efetivo para baixo
 disso, e foi a configuração que passou sem nenhum 429.
 
-Isso torna errada uma correção que parece óbvia — **reduzir o tamanho da
+Isso torna errada uma correção que parece óbvia, **reduzir o tamanho da
 página piora**:
 
 | `tamanhoPagina` | tempo/requisição | registros | eficiência |
@@ -101,13 +101,13 @@ página piora**:
 | 100 | 0,85 s | 100 | 118 reg/s |
 
 Página de 100 precisa de **5× mais requisições** para os mesmos dados, então
-bate no limite 5× mais rápido — e ainda rende menos por requisição. Numa
+bate no limite 5× mais rápido, e ainda rende menos por requisição. Numa
 rodada real com a escada de redução ligada, a página desceu até 100 e a vazão
 caiu para **2 registros/s**, pior que o extrator original.
 
 Por isso o controle principal é a `PortaRitmo`: um **intervalo mínimo entre
 duas requisições quaisquer**, compartilhado por todas as threads. Pausa por
-thread não serve — com N threads, o ritmo real fica N vezes maior que o
+thread não serve, com N threads, o ritmo real fica N vezes maior que o
 configurado. Os workers continuam úteis só para esconder latência.
 
 A escada de tamanho (500 → 450 → … → 100) existe e está testada, mas **vem
@@ -117,7 +117,7 @@ desligada**; `--escada` liga, caso um dia a API mude de comportamento.
 
 Um arquivo só, acrescentando linhas, mais um `.dias` com os dias que
 fecharam. Rodar de novo pula os dias já concluídos. Um dia só é gravado
-quando está inteiro, de uma vez, sob lock — duas threads nunca intercalam
+quando está inteiro, de uma vez, sob lock, duas threads nunca intercalam
 linhas nem deixam linha partida pela metade.
 
 Se o processo morrer entre gravar o dia e marcá-lo, aquele dia volta na
@@ -136,11 +136,11 @@ python baixar_pncp_rapido.py --verificar                # dias faltando, duplica
 
 > O `baixar_pncp.py` original continua no repositório e seus arquivos
 > (`contratos_2025.jsonl`, `contratos_2025.checkpoint`) não são tocados por
-> nenhum script novo — são lidos no tratamento e nunca escritos.
+> nenhum script novo, são lidos no tratamento e nunca escritos.
 
 ---
 
-## 2. Tratamento — `tratar_contratos.py`
+## 2. Tratamento: `tratar_contratos.py`
 
 Motor: **DuckDB**. Lê o glob de JSONL em paralelo, achata em SQL, processa fora
 da memória (não exige RAM maior que o dado) e escreve Parquet particionado num
@@ -152,12 +152,12 @@ O que o tratamento faz:
 - **Achata** os aninhados (`orgaoEntidade`, `unidadeOrgao`, `tipoContrato`,
   `categoriaProcesso`, e os sub-rogados) em colunas planas.
 - **Tipa** com `TRY_CAST`: data torta vira `NULL` em vez de derrubar a carga.
-- **Dinheiro em `DECIMAL(18,2)`**, nunca em float — somar milhões de contratos
+- **Dinheiro em `DECIMAL(18,2)`**, nunca em float, somar milhões de contratos
   em ponto flutuante acumula erro visível no total.
 - **CNPJ/CPF como texto**: em coluna numérica, `00394429000102` viraria
   `394429000102` e não casaria mais com a base da Receita.
 - **Deriva `cnpj_raiz_fornecedor`** (8 primeiros dígitos): agrupa matriz e
-  filiais. É a chave do cruzamento societário — o CNPJ completo separaria
+  filiais. É a chave do cruzamento societário, o CNPJ completo separaria
   filiais do mesmo grupo.
 - **Normaliza booleanos** que vêm nulos quando falsos (98% de nulo no bruto),
   para `IS NOT TRUE` e `= FALSE` não darem respostas diferentes no Aiven.
@@ -166,7 +166,7 @@ O que o tratamento faz:
 
 ### A deduplicação não é opcional
 
-O bruto atual tem **18.900 linhas para 18.500 chaves únicas — 400 duplicatas**.
+O bruto atual tem **18.900 linhas para 18.500 chaves únicas, 400 duplicatas**.
 O `.checkpoint` marca a página 185, mas o `.jsonl` tem 189 páginas: o resume do
 extrator original regravou 4 páginas já baixadas. Como os arquivos não devem ser
 alterados, o tratamento absorve isso. O extrator novo reduz muito essa classe
@@ -190,23 +190,23 @@ python tratar_contratos.py             # parquet + csv
 
 ---
 
-## 3. Carga — `carregar_aiven.py` + `schema_postgres.sql`
+## 3. Carga: `carregar_aiven.py` + `schema_postgres.sql`
 
 `COPY`, não `INSERT`: um INSERT por linha levaria horas onde o COPY leva
 minutos. A ordem é **tabela → COPY → índices → ANALYZE**, com os índices por
-último de propósito — mantê-los vivos durante a carga faz o Postgres reescrever
+último de propósito, mantê-los vivos durante a carga faz o Postgres reescrever
 as árvores a cada inserção.
 
 Índices pensados para a filtragem do trabalho: `ni_fornecedor` e
 `cnpj_raiz_fornecedor` (o eixo societário), `orgao_cnpj`, `(uf_sigla,
 data_publicacao)`, faixa de `valor_global`, BRIN em `data_publicacao` (a carga é
-mês a mês, então a tabela já fica quase ordenada — alguns KB contra dezenas de
+mês a mês, então a tabela já fica quase ordenada, alguns KB contra dezenas de
 MB de um btree) e GIN trigram em `objeto_contrato` para busca textual.
 
 Modos:
 
-- `substituir` — `TRUNCATE` + `COPY`. Mais rápido, para carga completa.
-- `incremental` — staging `UNLOGGED` + `INSERT ... ON CONFLICT DO UPDATE`.
+- `substituir`: `TRUNCATE` + `COPY`. Mais rápido, para carga completa.
+- `incremental`: staging `UNLOGGED` + `INSERT ... ON CONFLICT DO UPDATE`.
   Idempotente: reprocessar um mês atualiza as linhas em vez de estourar a PK.
 
 ```bash
@@ -231,7 +231,7 @@ pip install duckdb "psycopg[binary]" python-dotenv requests
 
 ## O que ainda não foi verificado
 
-O `COPY` contra um Postgres real **não foi executado** — não havia instância
+O `COPY` contra um Postgres real **não foi executado**, não havia instância
 nem Docker disponível nesta máquina. O que foi verificado: o DDL passa no
 parser oficial do Postgres (`libpg_query` via `pglast`), e a ordem das colunas
 bate entre `CREATE TABLE`, o cabeçalho do CSV e a lista do carregador. A

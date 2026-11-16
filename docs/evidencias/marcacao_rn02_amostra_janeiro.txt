@@ -1,0 +1,31 @@
+Marcacao da RN-02 (D3 e D9) sobre a amostra de janeiro de 2025
+Fonte: etl/dados/raw/pncp/contratos_2025_completo.jsonl
+Consulta: SQL_TRATAMENTO do etl/tratar_contratos.py, sem alteracao
+Rodado em 10/11/2026, DuckDB 1.5.5
+
+  contratos no periodo                     58,769
+  contrato_suspeito (> R$ 1 bi)                26
+  receita = true                              515
+  valor zero em centavos                      415
+  elegivel_valor = true                    57,835
+  sem raiz de CNPJ                          1,650
+  raizes distintas                         20,436
+
+  valor bruto somado                 R$ 2,645,371,244,529.42
+  valor dos suspeitos                R$ 2,612,089,025,537.84
+  valor elegivel                     R$  32,564,300,675.77
+  share dos suspeitos no bruto                     98.74%
+
+  mediana, valor > 0                 R$           4,260.00
+  media, valor > 0                   R$      45,333,160.44
+  mediana, elegivel                  R$           4,175.00
+  media, elegivel                    R$         563,055.26
+  razao media/mediana sem corte                    10642x
+  razao media/mediana com corte                      135x
+
+Conferencia contra o que docs/regras-de-negocio.md ja media na amostra:
+  26 contratos com 98,7% do valor     -> agora 26 com 98.74%
+  mediana de R$ 4.260,00 com valor>0  -> agora R$ 4,260.00
+
+Os dois numeros batem, o que valida a marcacao contra a medicao anterior.
+Nao e o ano inteiro: a amostra sao os 20 primeiros dias de janeiro.
